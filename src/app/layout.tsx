@@ -24,6 +24,8 @@ export const metadata: Metadata = {
     "A legal assistant workspace for Azure AI Search, SharePoint documents, and Foundry-style orchestration.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{
