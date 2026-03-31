@@ -126,7 +126,7 @@ function AuthenticatedStatus({ locale }: { locale: AppLocale }) {
   const handleSignOut = async () => {
     await instance.logoutRedirect({
       account,
-      postLogoutRedirectUri: window.location.origin,
+      postLogoutRedirectUri: `${window.location.origin}/`,
     });
   };
 
