@@ -3,6 +3,7 @@ import { Cairo, IBM_Plex_Mono } from "next/font/google";
 
 import { AuthProvider } from "@/components/auth-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { env } from "@/lib/env";
 
 import "./globals.css";
 
@@ -28,6 +29,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const runtimePublicEnv = {
+    nextPublicAzureTenantId: env.nextPublicAzureTenantId,
+    nextPublicAzureClientId: env.nextPublicAzureClientId,
+    nextPublicAzureApiScope: env.nextPublicAzureApiScope,
+    nextPublicAzureRedirectPath: env.nextPublicAzureRedirectPath,
+  };
+
   return (
     <html
       lang="ar"
@@ -35,6 +43,13 @@ export default function RootLayout({
       className={`${cairo.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__ALBASTI_PUBLIC_ENV__ = ${JSON.stringify(
+              runtimePublicEnv,
+            ).replace(/</g, "\\u003c")};`,
+          }}
+        />
         <AuthProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>

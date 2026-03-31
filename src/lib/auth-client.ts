@@ -4,20 +4,50 @@ import {
   type AccountInfo,
 } from "@azure/msal-browser";
 
-import { env, hasClientAuthConfig } from "@/lib/env";
+import { env } from "@/lib/env";
+
+declare global {
+  interface Window {
+    __ALBASTI_PUBLIC_ENV__?: {
+      nextPublicAzureTenantId?: string;
+      nextPublicAzureClientId?: string;
+      nextPublicAzureApiScope?: string;
+      nextPublicAzureRedirectPath?: string;
+    };
+  }
+}
 
 let clientApplication: PublicClientApplication | null = null;
 let initialized = false;
 
-export const authEnabled = hasClientAuthConfig;
+const getPublicAuthConfig = () => {
+  const runtime =
+    typeof window !== "undefined" ? window.__ALBASTI_PUBLIC_ENV__ : undefined;
+
+  return {
+    tenantId: runtime?.nextPublicAzureTenantId ?? env.nextPublicAzureTenantId,
+    clientId: runtime?.nextPublicAzureClientId ?? env.nextPublicAzureClientId,
+    apiScope: runtime?.nextPublicAzureApiScope ?? env.nextPublicAzureApiScope,
+    redirectPath:
+      runtime?.nextPublicAzureRedirectPath ?? env.nextPublicAzureRedirectPath ?? "/",
+  };
+};
+
+export const authEnabled = Boolean(
+  getPublicAuthConfig().tenantId &&
+    getPublicAuthConfig().clientId &&
+    getPublicAuthConfig().apiScope,
+);
 
 const getRedirectUri = () => {
+  const config = getPublicAuthConfig();
+
   if (typeof window === "undefined") {
-    return env.nextPublicAzureRedirectPath ?? "/";
+    return config.redirectPath;
   }
 
   return new URL(
-    env.nextPublicAzureRedirectPath ?? "/",
+    config.redirectPath,
     window.location.origin,
   ).toString();
 };
@@ -28,10 +58,12 @@ export const getMsalInstance = () => {
   }
 
   if (!clientApplication) {
+    const config = getPublicAuthConfig();
+
     clientApplication = new PublicClientApplication({
       auth: {
-        clientId: env.nextPublicAzureClientId!,
-        authority: `https://login.microsoftonline.com/${env.nextPublicAzureTenantId}`,
+        clientId: config.clientId!,
+        authority: `https://login.microsoftonline.com/${config.tenantId}`,
         redirectUri: getRedirectUri(),
         postLogoutRedirectUri: getRedirectUri(),
       },
@@ -80,12 +112,17 @@ export const initializeMsal = async () => {
 
 export const loginRequest = authEnabled
   ? {
-      scopes: ["openid", "profile", "offline_access", env.nextPublicAzureApiScope!],
+      scopes: [
+        "openid",
+        "profile",
+        "offline_access",
+        getPublicAuthConfig().apiScope!,
+      ],
     }
   : undefined;
 
 export const apiTokenRequest = authEnabled
   ? {
-      scopes: [env.nextPublicAzureApiScope!],
+      scopes: [getPublicAuthConfig().apiScope!],
     }
   : undefined;
