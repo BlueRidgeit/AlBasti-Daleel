@@ -5,7 +5,7 @@ import { useMsal } from "@azure/msal-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { authEnabled, loginRequest } from "@/lib/auth-client";
+import { getLoginRequest, isAuthEnabled } from "@/lib/auth-client";
 import { appCopy, type AppLocale } from "@/lib/i18n";
 
 export function AuthStatus({ locale }: { locale: AppLocale }) {
@@ -16,18 +16,18 @@ export function AuthStatus({ locale }: { locale: AppLocale }) {
     setMounted(true);
   }, []);
 
-  if (!authEnabled) {
-    return (
-      <div className="rounded-full border border-primary/15 bg-primary/6 px-3 py-1.5 text-xs text-primary">
-        {copy.authSetupPending}
-      </div>
-    );
-  }
-
   if (!mounted) {
     return (
       <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
         {copy.authSignedOut}
+      </div>
+    );
+  }
+
+  if (!isAuthEnabled()) {
+    return (
+      <div className="rounded-full border border-primary/15 bg-primary/6 px-3 py-1.5 text-xs text-primary">
+        {copy.authSetupPending}
       </div>
     );
   }
@@ -49,10 +49,10 @@ export function AuthRequired({
   }, []);
 
   if (!mounted) {
-    return <AuthLockedState locale={locale} />;
+    return <AuthLockedState locale={locale} loading />;
   }
 
-  if (!authEnabled) {
+  if (!isAuthEnabled()) {
     return <AuthLockedState locale={locale} setupPending />;
   }
 
@@ -79,9 +79,11 @@ function AuthenticatedGate({
 function AuthLockedState({
   locale,
   setupPending = false,
+  loading = false,
 }: {
   locale: AppLocale;
   setupPending?: boolean;
+  loading?: boolean;
 }) {
   const copy = appCopy[locale];
 
@@ -95,9 +97,15 @@ function AuthLockedState({
           {setupPending ? copy.authSetupPending : copy.lockedTitle}
         </h3>
         <p className="mt-4 text-base leading-7 text-slate-700">
-          {setupPending ? copy.liveAccessRequiresSignIn : copy.lockedDescription}
+          {loading
+            ? copy.liveAccessRequiresSignIn
+            : setupPending
+              ? copy.liveAccessRequiresSignIn
+              : copy.lockedDescription}
         </p>
-        {!setupPending ? <SignInButton locale={locale} large className="mt-6" /> : null}
+        {!setupPending && !loading ? (
+          <SignInButton locale={locale} large className="mt-6" />
+        ) : null}
       </div>
     </div>
   );
@@ -212,6 +220,7 @@ export function SignInButton({
   const copy = appCopy[locale];
 
   const handleSignIn = async () => {
+    const loginRequest = getLoginRequest();
     if (!loginRequest) {
       return;
     }

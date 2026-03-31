@@ -6,7 +6,7 @@ import { useMsal } from "@azure/msal-react";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LanguagesIcon, LogOutIcon, ShieldCheckIcon, UserCircle2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { authEnabled } from "@/lib/auth-client";
+import { isAuthEnabled } from "@/lib/auth-client";
 import { appCopy, defaultLocale, localeLabels, type AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
@@ -34,6 +34,7 @@ export default function SettingsPage() {
 
   const copy = appCopy[locale];
   const isArabic = locale === "ar";
+  const authEnabled = isAuthEnabled();
   const BackIcon = isArabic ? ArrowRightIcon : ArrowLeftIcon;
   const workspaceHref = `/?locale=${locale}`;
 
@@ -95,6 +96,7 @@ function AccountCard({ locale }: { locale: AppLocale }) {
   const copy = appCopy[locale];
   const account = instance.getActiveAccount() ?? accounts[0];
   const isArabic = locale === "ar";
+  const authEnabled = isAuthEnabled();
 
   const initials = (account?.name ?? account?.username ?? "U")
     .split(/\s+/)
@@ -106,7 +108,7 @@ function AccountCard({ locale }: { locale: AppLocale }) {
   const handleSignOut = async () => {
     await instance.logoutRedirect({
       account,
-      postLogoutRedirectUri: window.location.origin,
+      postLogoutRedirectUri: `${window.location.origin}/`,
     });
   };
 

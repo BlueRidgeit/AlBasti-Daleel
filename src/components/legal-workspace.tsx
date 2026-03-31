@@ -26,7 +26,7 @@ import { useEffect, useMemo, useState, type ComponentType } from "react";
 
 import { Assistant } from "@/app/assistant";
 import { AuthRequired, AuthStatus } from "@/components/auth-status";
-import { authEnabled } from "@/lib/auth-client";
+import { isAuthEnabled } from "@/lib/auth-client";
 import { getApiAccessToken } from "@/lib/auth-browser";
 import {
   appCopy,
@@ -75,7 +75,7 @@ export function LegalWorkspace() {
   }, [locale]);
 
   useEffect(() => {
-    if (!authEnabled) {
+    if (!isAuthEnabled()) {
       setHistoryGroups([]);
       return;
     }
@@ -607,6 +607,7 @@ function StarterPromptButton({
   isArabic: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
+  const authEnabled = mounted ? isAuthEnabled() : false;
 
   useEffect(() => {
     setMounted(true);

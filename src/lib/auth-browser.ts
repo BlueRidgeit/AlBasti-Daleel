@@ -3,19 +3,22 @@
 import { InteractionRequiredAuthError } from "@azure/msal-browser";
 
 import {
-  apiTokenRequest,
-  authEnabled,
+  getApiTokenRequest,
   getMsalInstance,
   initializeMsal,
-  loginRequest,
+  getLoginRequest,
+  isAuthEnabled,
 } from "@/lib/auth-client";
 
 export async function getApiAccessToken() {
-  if (!authEnabled) {
+  if (!isAuthEnabled()) {
     return undefined;
   }
 
   const instance = await initializeMsal();
+  const apiTokenRequest = getApiTokenRequest();
+  const loginRequest = getLoginRequest();
+
   if (!instance || !apiTokenRequest) {
     return undefined;
   }

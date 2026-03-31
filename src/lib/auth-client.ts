@@ -33,11 +33,11 @@ const getPublicAuthConfig = () => {
   };
 };
 
-export const authEnabled = Boolean(
-  getPublicAuthConfig().tenantId &&
-    getPublicAuthConfig().clientId &&
-    getPublicAuthConfig().apiScope,
-);
+export const isAuthEnabled = () => {
+  const config = getPublicAuthConfig();
+
+  return Boolean(config.tenantId && config.clientId && config.apiScope);
+};
 
 const getRedirectUri = () => {
   const config = getPublicAuthConfig();
@@ -53,7 +53,7 @@ const getRedirectUri = () => {
 };
 
 export const getMsalInstance = () => {
-  if (!authEnabled) {
+  if (!isAuthEnabled()) {
     return null;
   }
 
@@ -110,19 +110,21 @@ export const initializeMsal = async () => {
   return instance;
 };
 
-export const loginRequest = authEnabled
-  ? {
-      scopes: [
-        "openid",
-        "profile",
-        "offline_access",
-        getPublicAuthConfig().apiScope!,
-      ],
-    }
-  : undefined;
+export const getLoginRequest = () =>
+  isAuthEnabled()
+    ? {
+        scopes: [
+          "openid",
+          "profile",
+          "offline_access",
+          getPublicAuthConfig().apiScope!,
+        ],
+      }
+    : undefined;
 
-export const apiTokenRequest = authEnabled
-  ? {
-      scopes: [getPublicAuthConfig().apiScope!],
-    }
-  : undefined;
+export const getApiTokenRequest = () =>
+  isAuthEnabled()
+    ? {
+        scopes: [getPublicAuthConfig().apiScope!],
+      }
+    : undefined;

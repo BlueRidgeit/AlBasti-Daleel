@@ -1,24 +1,30 @@
 "use client";
 
 import { MsalProvider } from "@azure/msal-react";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
-import { authEnabled, getMsalInstance, initializeMsal } from "@/lib/auth-client";
+import { getMsalInstance, initializeMsal, isAuthEnabled } from "@/lib/auth-client";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const instance = getMsalInstance();
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
-    if (!authEnabled) {
+    setEnabled(isAuthEnabled());
+  }, []);
+
+  const instance = enabled ? getMsalInstance() : null;
+
+  useEffect(() => {
+    if (!enabled) {
       return;
     }
 
     initializeMsal().catch((error) => {
       console.error("MSAL initialization failed", error);
     });
-  }, []);
+  }, [enabled]);
 
-  if (!authEnabled || !instance) {
+  if (!enabled || !instance) {
     return <>{children}</>;
   }
 
