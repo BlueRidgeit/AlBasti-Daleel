@@ -1,0 +1,42 @@
+import { z } from "zod";
+
+import { validateDocumentAccess } from "@/lib/read-document";
+import {
+  acquireGraphTokenOnBehalfOf,
+  getRequestBearerToken,
+} from "@/lib/auth-server";
+
+export const runtime = "nodejs";
+
+const requestSchema = z.object({
+  itemId: z.string().trim().min(1),
+});
+
+export async function POST(request: Request) {
+  const payload = requestSchema.parse(await request.json());
+  const apiAccessToken = getRequestBearerToken(request);
+  let graphAccessToken: string | undefined;
+  let graphAccessError: string | undefined;
+
+  if (apiAccessToken) {
+    graphAccessToken = await acquireGraphTokenOnBehalfOf(apiAccessToken).catch(
+      (error) => {
+        console.error("Graph OBO acquisition failed", error);
+        graphAccessError =
+          error instanceof Error
+            ? error.message
+            : "Unknown OBO token acquisition error.";
+        return undefined;
+      },
+    );
+  }
+
+  const result = await validateDocumentAccess(
+    request,
+    payload.itemId,
+    graphAccessToken,
+    graphAccessError,
+  );
+
+  return Response.json(result);
+}
