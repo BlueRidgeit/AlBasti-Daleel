@@ -64,6 +64,9 @@ These should be added as plain **environment variables**.
 | `AZURE_OPENAI_RESOURCE_NAME` | Leave blank if using `AZURE_OPENAI_BASE_URL` | BlueRidge Azure resource |
 | `AZURE_OPENAI_API_VERSION` | `v1` | App config |
 | `AZURE_OPENAI_CHAT_DEPLOYMENT` | Example: `gpt-4o` | BlueRidge Azure OpenAI deployment |
+| `AZURE_OPENAI_WEB_SEARCH_DEPLOYMENT` | Optional separate deployment for `web_search_preview`; otherwise reuse the chat deployment | BlueRidge Azure OpenAI deployment |
+| `AZURE_WEB_SEARCH_COUNTRY` | Example: `AE` | BlueRidge app config |
+| `AZURE_WEB_SEARCH_CONTEXT_SIZE` | `low`, `medium`, or `high` | BlueRidge app config |
 | `AZURE_SEARCH_ENDPOINT` | `https://<service>.search.windows.net` | BlueRidge Azure resource |
 | `AZURE_SEARCH_INDEX_NAME` | Usually `docs-index` | App/search config |
 | `AZURE_SEARCH_SEMANTIC_CONFIGURATION` | Usually `legal-semantic` | App/search config |
@@ -103,6 +106,9 @@ Use these exact environment variable values in the Container App.
 | `AZURE_OPENAI_RESOURCE_NAME` | blank unless you intentionally use resource-name mode |
 | `AZURE_OPENAI_API_VERSION` | `v1` |
 | `AZURE_OPENAI_CHAT_DEPLOYMENT` | your deployment name |
+| `AZURE_OPENAI_WEB_SEARCH_DEPLOYMENT` | optional dedicated web-search deployment name, or leave blank and reuse the chat deployment |
+| `AZURE_WEB_SEARCH_COUNTRY` | `AE` |
+| `AZURE_WEB_SEARCH_CONTEXT_SIZE` | `medium` |
 | `AZURE_SEARCH_ENDPOINT` | your Azure AI Search endpoint |
 | `AZURE_SEARCH_INDEX_NAME` | `docs-index` |
 | `AZURE_SEARCH_SEMANTIC_CONFIGURATION` | `legal-semantic` |

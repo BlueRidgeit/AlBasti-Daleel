@@ -30,6 +30,10 @@ export const env = {
   azureOpenAIChatDeployment:
     trimToUndefined(process.env.AZURE_OPENAI_CHAT_DEPLOYMENT) ??
     trimToUndefined(process.env.AZURE_OPENAI_DEPLOYMENT),
+  azureOpenAIWebSearchDeployment:
+    trimToUndefined(process.env.AZURE_OPENAI_WEB_SEARCH_DEPLOYMENT) ??
+    trimToUndefined(process.env.AZURE_OPENAI_CHAT_DEPLOYMENT) ??
+    trimToUndefined(process.env.AZURE_OPENAI_DEPLOYMENT),
   azureSearchEndpoint: trimToUndefined(process.env.AZURE_SEARCH_ENDPOINT),
   azureSearchApiKey: trimToUndefined(process.env.AZURE_SEARCH_API_KEY),
   azureSearchIndexName:
@@ -77,6 +81,10 @@ export const env = {
   azureCosmosSessionsContainer:
     trimToUndefined(process.env.AZURE_COSMOS_SESSIONS_CONTAINER) ??
     "sessionLogs",
+  azureWebSearchCountry:
+    trimToUndefined(process.env.AZURE_WEB_SEARCH_COUNTRY) ?? "AE",
+  azureWebSearchContextSize:
+    trimToUndefined(process.env.AZURE_WEB_SEARCH_CONTEXT_SIZE) ?? "medium",
 };
 
 export const hasAzureOpenAIConfig = Boolean(
@@ -108,4 +116,10 @@ export const hasAzureCosmosConfig = Boolean(
     env.azureCosmosDatabase &&
     env.azureCosmosThreadsContainer &&
     env.azureCosmosSessionsContainer,
+);
+
+export const hasAzureWebSearchConfig = Boolean(
+  env.azureOpenAIApiKey &&
+    env.azureOpenAIBaseUrl &&
+    env.azureOpenAIWebSearchDeployment,
 );

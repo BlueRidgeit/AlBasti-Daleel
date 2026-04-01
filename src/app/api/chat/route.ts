@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { z } from "zod";
 
-import { env, hasAzureOpenAIConfig } from "@/lib/env";
+import { env, hasAzureOpenAIConfig, hasAzureWebSearchConfig } from "@/lib/env";
 import {
   getAuthenticatedUserFromRequest,
   acquireGraphTokenOnBehalfOf,
@@ -24,6 +24,7 @@ import {
 } from "@/lib/language-preference";
 import { readDocument, validateDocumentAccess } from "@/lib/read-document";
 import { searchDocuments } from "@/lib/search-documents";
+import { searchPublicWeb } from "@/lib/web-search";
 import {
   collectUploadedDocuments,
   readUploadedDocument,
@@ -170,6 +171,27 @@ export async function POST(req: Request) {
             graphAccessError,
           ),
       }),
+      ...(hasAzureWebSearchConfig
+        ? {
+            web_search: tool({
+              description:
+                "Search the public web for current or external information. Use this only for public internet questions, not for internal repository or SharePoint document retrieval.",
+              inputSchema: z.object({
+                query: z
+                  .string()
+                  .min(1)
+                  .describe(
+                    "The public web question or search query to look up.",
+                  ),
+              }),
+              execute: async ({ query }) =>
+                searchPublicWeb({
+                  query,
+                  locale,
+                }),
+            }),
+          }
+        : {}),
       ...(uploadedDocuments.length > 0
         ? {
             read_uploaded_document: tool({
