@@ -69,12 +69,43 @@ const detectLanguageInText = (text: string): ConversationLanguage | undefined =>
   return undefined;
 };
 
+const detectNaturalLanguageInText = (
+  text: string,
+): ConversationLanguage | undefined => {
+  if (!text.trim()) {
+    return undefined;
+  }
+
+  const hasArabicScript = /[\u0600-\u06FF]/.test(text);
+  const latinMatches = text.match(/[A-Za-z]/g);
+  const latinCount = latinMatches?.length ?? 0;
+
+  if (hasArabicScript) {
+    return "ar";
+  }
+
+  if (latinCount >= 3) {
+    return "en";
+  }
+
+  return undefined;
+};
+
 export const resolveConversationLanguage = (
   messages: UIMessage[],
 ): ConversationLanguage => {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const text = extractUserText(messages[index]);
     const detected = detectLanguageInText(text);
+
+    if (detected) {
+      return detected;
+    }
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const text = extractUserText(messages[index]);
+    const detected = detectNaturalLanguageInText(text);
 
     if (detected) {
       return detected;
@@ -90,7 +121,7 @@ export const buildLanguageDirective = (messages: UIMessage[]) => {
   if (language === "en") {
     return [
       "Current conversation response language: English.",
-      "The user explicitly requested English most recently, so answer entirely in English unless the user later switches back to Arabic.",
+      "Answer in English because the user's latest language signal is English, either by explicit request or by writing the latest substantive message in English.",
       "If the latest user message only changes the language, respond with a brief English acknowledgment and continue in English on later turns.",
       "When returning source links, print the full raw URL on its own line instead of markdown link text.",
     ].join(" ");
@@ -98,7 +129,7 @@ export const buildLanguageDirective = (messages: UIMessage[]) => {
 
   return [
     "Current conversation response language: Arabic.",
-    "Answer entirely in Arabic unless the user later explicitly requests English.",
+    "Answer in Arabic because the user's latest language signal is Arabic, either by explicit request or by writing the latest substantive message in Arabic.",
     "If the latest user message only changes the language, respond with a brief Arabic acknowledgment and continue in Arabic on later turns.",
     "When returning source links, print the full raw URL on its own line instead of markdown link text.",
   ].join(" ");

@@ -1,6 +1,6 @@
 "use client";
 
-import { PropsWithChildren, useEffect, useState, type FC } from "react";
+import { PropsWithChildren, useEffect, useMemo, useState, type FC } from "react";
 import { XIcon, PlusIcon, FileText } from "lucide-react";
 import {
   AttachmentPrimitive,
@@ -58,6 +58,63 @@ const useAttachmentSrc = () => {
   );
 
   return useFileSrc(file) ?? src;
+};
+
+const getAttachmentExtension = (name: string) => {
+  const trimmed = name.trim();
+  const lastDot = trimmed.lastIndexOf(".");
+  return lastDot >= 0 ? trimmed.slice(lastDot + 1).toUpperCase() : "";
+};
+
+const getAttachmentBadge = (
+  name: string,
+  mediaType: string | undefined,
+  isImage: boolean,
+) => {
+  if (isImage) {
+    return "IMG";
+  }
+
+  const extension = getAttachmentExtension(name);
+  if (extension) {
+    return extension.slice(0, 4);
+  }
+
+  if (mediaType?.startsWith("text/")) {
+    return "TXT";
+  }
+
+  return "FILE";
+};
+
+const useAttachmentMeta = () => {
+  return useAuiState(
+    useShallow((s) => {
+      const content = Array.isArray(s.attachment.content) ? s.attachment.content : [];
+      const contentFile = content.find(
+        (part) =>
+          part &&
+          typeof part === "object" &&
+          (("filename" in part && typeof part.filename === "string") ||
+            ("mediaType" in part && typeof part.mediaType === "string")),
+      ) as
+        | {
+            filename?: string;
+            mediaType?: string;
+          }
+        | undefined;
+
+      return {
+        isImage: s.attachment.type === "image",
+        name:
+          s.attachment.file?.name ??
+          contentFile?.filename ??
+          "Attachment",
+        mediaType:
+          s.attachment.file?.type ?? contentFile?.mediaType,
+      };
+    }),
+  );
 };
 
 type AttachmentPreviewProps = {
@@ -126,21 +183,22 @@ const AttachmentThumb: FC = () => {
 const AttachmentUI: FC = () => {
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
-
-  const isImage = useAuiState((s) => s.attachment.type === "image");
-  const typeLabel = useAuiState((s) => {
-    const type = s.attachment.type;
-    switch (type) {
-      case "image":
-        return "Image";
-      case "document":
-        return "Document";
-      case "file":
-        return "File";
-      default:
-        return type;
+  const { isImage, name, mediaType } = useAttachmentMeta();
+  const typeLabel = useMemo(() => {
+    if (isImage) {
+      return "Image";
     }
-  });
+
+    if (mediaType?.startsWith("text/")) {
+      return "Text document";
+    }
+
+    return "Document";
+  }, [isImage, mediaType]);
+  const badgeLabel = useMemo(
+    () => getAttachmentBadge(name, mediaType, isImage),
+    [isImage, mediaType, name],
+  );
 
   return (
     <Tooltip>
@@ -153,20 +211,49 @@ const AttachmentUI: FC = () => {
         <AttachmentPreviewDialog>
           <TooltipTrigger
             render={
-              <div
-                className="aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius)-var(--composer-padding))] border bg-muted transition-opacity hover:opacity-75"
-                role="button"
-                aria-label={`${typeLabel} attachment`}
-              />
+              isImage ? (
+                <div
+                  className="aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-[calc(var(--composer-radius)-var(--composer-padding))] border bg-muted transition-opacity hover:opacity-75"
+                  role="button"
+                  aria-label={`${typeLabel} attachment`}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "aui-attachment-tile flex min-w-0 cursor-pointer items-center gap-3 overflow-hidden rounded-[calc(var(--composer-radius)-var(--composer-padding))] border bg-muted/55 transition-colors hover:bg-muted/75",
+                    isComposer
+                      ? "max-w-full px-3 py-2 pr-10"
+                      : "max-w-[22rem] px-3 py-2",
+                  )}
+                  role="button"
+                  aria-label={`${typeLabel} attachment`}
+                />
+              )
             }
           >
-            <AttachmentThumb />
+            {isImage ? (
+              <AttachmentThumb />
+            ) : (
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background text-[11px] font-semibold tracking-[0.08em] text-foreground/75 shadow-sm">
+                  {badgeLabel}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-foreground">
+                    {name}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {typeLabel}
+                  </div>
+                </div>
+              </div>
+            )}
           </TooltipTrigger>
         </AttachmentPreviewDialog>
         {isComposer && <AttachmentRemove />}
       </AttachmentPrimitive.Root>
       <TooltipContent side="top">
-        <AttachmentPrimitive.Name />
+        {name}
       </TooltipContent>
     </Tooltip>
   );

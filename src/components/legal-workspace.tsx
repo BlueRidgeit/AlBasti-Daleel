@@ -83,9 +83,47 @@ const toRuntimeMessages = (messages: StoredThreadMessage[]): UIMessage[] =>
       ],
     }));
 
-const getInitialLocale = (): AppLocale => {
+const extractMessageText = (message: UIMessage) => {
+  const parts = Array.isArray(message.parts) ? message.parts : [];
+
+  return parts
+    .map((part) => {
+      if (!part || typeof part !== "object") {
+        return "";
+      }
+
+      if ("type" in part && part.type === "text" && "text" in part) {
+        return typeof part.text === "string" ? part.text : "";
+      }
+
+      return "";
+    })
+    .join("\n")
+    .trim();
+};
+
+const truncateLabel = (value: string, max = 56) =>
+  value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+
+const getThreadTitleFromMessages = (messages: UIMessage[], fallback: string) => {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  const title = firstUserMessage ? extractMessageText(firstUserMessage) : "";
+
+  return truncateLabel(title || fallback, 56);
+};
+
+const getThreadPreviewFromMessages = (messages: UIMessage[]) => {
+  const latestText = [...messages]
+    .reverse()
+    .map(extractMessageText)
+    .find(Boolean);
+
+  return truncateLabel(latestText ?? "", 96);
+};
+
+const getInitialLocale = (fallback: AppLocale): AppLocale => {
   if (typeof window === "undefined") {
-    return defaultLocale;
+    return fallback;
   }
 
   const urlLocale = new URLSearchParams(window.location.search).get("locale");
@@ -98,11 +136,16 @@ const getInitialLocale = (): AppLocale => {
     return saved;
   }
 
-  return window.navigator.language.toLowerCase().startsWith("ar") ? "ar" : "en";
+  return window.navigator.language.toLowerCase().startsWith("ar") ? "ar" : fallback;
 };
 
-export function LegalWorkspace() {
-  const [locale, setLocale] = useState<AppLocale>(defaultLocale);
+export function LegalWorkspace({
+  initialLocale = defaultLocale,
+}: {
+  initialLocale?: AppLocale;
+}) {
+  const [locale, setLocale] = useState<AppLocale>(initialLocale);
+  const [localeHydrated, setLocaleHydrated] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
@@ -111,14 +154,20 @@ export function LegalWorkspace() {
   const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
 
   useEffect(() => {
-    setLocale(getInitialLocale());
-  }, []);
+    setLocale(getInitialLocale(initialLocale));
+    setLocaleHydrated(true);
+  }, [initialLocale]);
 
   useEffect(() => {
+    if (!localeHydrated) {
+      return;
+    }
+
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
     window.localStorage.setItem(localeStorageKey, locale);
-  }, [locale]);
+    document.cookie = `${localeStorageKey}=${locale}; path=/; max-age=31536000; samesite=lax`;
+  }, [locale, localeHydrated]);
 
   const loadHistory = async (currentLocale: AppLocale) => {
     const accessToken = await getApiAccessToken().catch(() => undefined);
@@ -160,6 +209,10 @@ export function LegalWorkspace() {
   };
 
   useEffect(() => {
+    if (!localeHydrated) {
+      return;
+    }
+
     if (!isAuthEnabled()) {
       setHistoryGroups([]);
       return;
@@ -183,10 +236,35 @@ export function LegalWorkspace() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [locale]);
+  }, [locale, localeHydrated]);
 
   const copy = appCopy[locale];
   const isArabic = locale === "ar";
+  const workspaceTitle = truncateLabel(
+    activeThread?.title?.trim() || copy.navNewChat,
+    52,
+  );
+
+  const handleThreadActivity = ({
+    threadId,
+    messages,
+  }: {
+    threadId: string;
+    messages: UIMessage[];
+  }) => {
+    setActiveThread((current) => {
+      const previous = current?.id === threadId ? current : undefined;
+
+      return {
+        id: threadId,
+        title: getThreadTitleFromMessages(messages, previous?.title ?? copy.navNewChat),
+        preview: getThreadPreviewFromMessages(messages),
+        updatedAt: new Date().toISOString(),
+        locale,
+        messages,
+      };
+    });
+  };
 
   const handleOpenThread = async (threadId: string) => {
     setLoadingThreadId(threadId);
@@ -249,6 +327,7 @@ export function LegalWorkspace() {
       key={`${activeThread?.id ?? "new"}:${activeThreadVersion}`}
       activeThreadId={activeThread?.id}
       initialMessages={activeThread?.messages ?? []}
+      onThreadActivity={handleThreadActivity}
     >
       <main
         className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(38,53,139,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(205,170,72,0.18),_transparent_24%),linear-gradient(180deg,_#f6f4f0_0%,_#ece7de_100%)] px-3 py-3 text-slate-900 md:px-4 md:py-4"
@@ -283,6 +362,7 @@ export function LegalWorkspace() {
                 isArabic={isArabic}
                 panelOpen={panelOpen}
                 setPanelOpen={setPanelOpen}
+                title={workspaceTitle}
               />
             </>
           ) : (
@@ -292,6 +372,7 @@ export function LegalWorkspace() {
                 isArabic={isArabic}
                 panelOpen={panelOpen}
                 setPanelOpen={setPanelOpen}
+                title={workspaceTitle}
               />
               {panelOpen ? (
                 <SupportPanel
@@ -323,10 +404,15 @@ export function LegalWorkspace() {
 function ChatRuntimeShell({
   activeThreadId,
   initialMessages,
+  onThreadActivity,
   children,
 }: {
   activeThreadId?: string;
   initialMessages: UIMessage[];
+  onThreadActivity: (payload: {
+    threadId: string;
+    messages: UIMessage[];
+  }) => void;
   children: ReactNode;
 }) {
   const runtime = useChatRuntime({
@@ -335,6 +421,14 @@ function ChatRuntimeShell({
     transport: new AssistantChatTransport({
       api: "/api/chat",
       prepareSendMessagesRequest: async (options) => {
+        const resolvedThreadId =
+          activeThreadId ?? options.id ?? crypto.randomUUID();
+
+        onThreadActivity({
+          threadId: resolvedThreadId,
+          messages: options.messages,
+        });
+
         const accessToken = await getApiAccessToken().catch((error) => {
           console.error("Failed to acquire API access token", error);
           return undefined;
@@ -344,7 +438,7 @@ function ChatRuntimeShell({
           api: options.api,
           body: {
             ...(options.body ?? {}),
-            id: activeThreadId ?? options.id,
+            id: resolvedThreadId,
             messages: options.messages,
             requestMetadata: options.requestMetadata,
           },
@@ -370,11 +464,13 @@ function Workspace({
   isArabic,
   panelOpen,
   setPanelOpen,
+  title,
 }: {
   locale: AppLocale;
   isArabic: boolean;
   panelOpen: boolean;
   setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  title: string;
 }) {
   const copy = appCopy[locale];
   const CollapseIcon = isArabic ? PanelRightCloseIcon : PanelLeftCloseIcon;
@@ -404,17 +500,11 @@ function Workspace({
               )}
             </button>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary/70">
-                {copy.workspaceBadge}
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                {copy.workspaceTitle}
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+                {title}
               </h2>
             </div>
           </div>
-          <p className="max-w-xl text-sm leading-6 text-slate-700">
-            {copy.workspaceDescription}
-          </p>
         </div>
       </div>
 
@@ -475,9 +565,6 @@ function PrimaryNav({
             <h1 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-tight text-sidebar-foreground">
               {copy.title}
             </h1>
-            <p className="mt-3 text-sm leading-6 text-sidebar-foreground/75">
-              {copy.description}
-            </p>
           </div>
 
           <div className={`flex ${isArabic ? "justify-end" : "justify-start"}`}>

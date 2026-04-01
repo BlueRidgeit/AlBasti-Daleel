@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Cairo, IBM_Plex_Mono } from "next/font/google";
 
 import { AuthProvider } from "@/components/auth-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { env } from "@/lib/env";
+import { defaultLocale } from "@/lib/i18n";
 
 import "./globals.css";
 
@@ -26,11 +28,19 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
+const localeCookieName = "albasti-search-chat-locale";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const cookieLocale = cookieStore.get(localeCookieName)?.value;
+  const initialLocale =
+    cookieLocale === "ar" || cookieLocale === "en"
+      ? cookieLocale
+      : defaultLocale;
   const runtimePublicEnv = {
     nextPublicAzureTenantId: env.nextPublicAzureTenantId,
     nextPublicAzureClientId: env.nextPublicAzureClientId,
@@ -40,8 +50,8 @@ export default function RootLayout({
 
   return (
     <html
-      lang="ar"
-      dir="rtl"
+      lang={initialLocale}
+      dir={initialLocale === "ar" ? "rtl" : "ltr"}
       className={`${cairo.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

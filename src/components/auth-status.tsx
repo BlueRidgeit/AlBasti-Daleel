@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getLoginRequest, isAuthEnabled } from "@/lib/auth-client";
 import { appCopy, type AppLocale } from "@/lib/i18n";
 
+const localeStorageKey = "albasti-search-chat-locale";
+
 export function AuthStatus({ locale }: { locale: AppLocale }) {
   const copy = appCopy[locale];
   const [mounted, setMounted] = useState(false);
@@ -132,13 +134,15 @@ function AuthenticatedStatus({ locale }: { locale: AppLocale }) {
   }, [account?.name, account?.username]);
 
   const handleSignOut = async () => {
+    window.localStorage.setItem(localeStorageKey, locale);
+    document.cookie = `${localeStorageKey}=${locale}; path=/; max-age=31536000; samesite=lax`;
     await instance.logoutRedirect({
       account,
       postLogoutRedirectUri: `${window.location.origin}/`,
     });
   };
 
-  const handleOpenSettings = () => router.push("/settings");
+  const handleOpenSettings = () => router.push(`/settings?locale=${locale}`);
 
   return account ? (
     <div className={`space-y-3 ${isArabic ? "text-right" : "text-left"}`}>
@@ -225,7 +229,12 @@ export function SignInButton({
       return;
     }
 
-    await instance.loginRedirect(loginRequest);
+    window.localStorage.setItem(localeStorageKey, locale);
+    document.cookie = `${localeStorageKey}=${locale}; path=/; max-age=31536000; samesite=lax`;
+    await instance.loginRedirect({
+      ...loginRequest,
+      redirectStartPage: `${window.location.origin}/?locale=${locale}`,
+    });
   };
 
   return (

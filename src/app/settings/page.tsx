@@ -184,6 +184,7 @@ function PreferencesCard({
   const handleLocaleChange = (value: AppLocale) => {
     setLocale(value);
     window.localStorage.setItem(localeStorageKey, value);
+    document.cookie = `${localeStorageKey}=${value}; path=/; max-age=31536000; samesite=lax`;
   };
 
   return (
