@@ -10,12 +10,17 @@ export async function GET(request: Request) {
     return Response.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const locale = searchParams.get("locale") === "en" ? "en" : "ar";
-  const groups = await listThreadHistory({
-    userId: user.objectId,
-    locale,
-  });
+  try {
+    const { searchParams } = new URL(request.url);
+    const locale = searchParams.get("locale") === "en" ? "en" : "ar";
+    const groups = await listThreadHistory({
+      userId: user.objectId,
+      locale,
+    });
 
-  return Response.json({ groups });
+    return Response.json({ groups });
+  } catch (error) {
+    console.error("Failed to load thread history", error);
+    return Response.json({ groups: [], error: "History unavailable." });
+  }
 }

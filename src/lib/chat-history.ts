@@ -274,16 +274,24 @@ export async function listThreadHistory(args: {
   }
 
   const { resources: threads } = await resources.threads.items
-    .query<ThreadDocument>({
-      query:
-        "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'thread' ORDER BY c.updatedAt DESC",
-      parameters: [{ name: "@userId", value: args.userId }],
-    })
+    .query<ThreadDocument>(
+      {
+        query: "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'thread'",
+        parameters: [{ name: "@userId", value: args.userId }],
+      },
+      {
+        partitionKey: args.userId,
+      },
+    )
     .fetchAll();
+
+  const sortedThreads = [...threads].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  );
 
   const grouped = new Map<string, HistoryGroup["items"]>();
 
-  for (const thread of threads) {
+  for (const thread of sortedThreads) {
     const label = getLocalizedBucket(new Date(thread.updatedAt), args.locale);
     const items = grouped.get(label) ?? [];
     items.push({
