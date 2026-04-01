@@ -324,7 +324,7 @@ export function LegalWorkspace({
 
   return (
     <ChatRuntimeShell
-      key={`${activeThread?.id ?? "new"}:${activeThreadVersion}`}
+      key={`runtime:${activeThreadVersion}`}
       activeThreadId={activeThread?.id}
       initialMessages={activeThread?.messages ?? []}
       onThreadActivity={handleThreadActivity}
