@@ -24,6 +24,11 @@ export const metadata: Metadata = {
   title: "Al-Basti Search Chat",
   description:
     "A legal assistant workspace for Azure AI Search, SharePoint documents, and Foundry-style orchestration.",
+  icons: {
+    icon: "/albastilogo.png",
+    shortcut: "/albastilogo.png",
+    apple: "/albastilogo.png",
+  },
 };
 
 export const dynamic = "force-dynamic";
