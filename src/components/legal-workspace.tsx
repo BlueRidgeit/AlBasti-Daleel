@@ -6,6 +6,7 @@ import {
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { useMsal } from "@azure/msal-react";
+import type { UIMessage } from "ai";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,7 +23,7 @@ import {
   SidebarOpenIcon,
   ScaleIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 
 import { Assistant } from "@/app/assistant";
 import { AuthRequired, AuthStatus } from "@/components/auth-status";
@@ -37,6 +38,50 @@ import {
 import type { AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
+
+type HistoryEntry = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  preview: string;
+};
+
+type HistoryGroup = {
+  label: string;
+  items: HistoryEntry[];
+};
+
+type StoredThreadMessage = {
+  id: string;
+  role: string;
+  text: string;
+};
+
+type ActiveThread = {
+  id: string;
+  title: string;
+  preview: string;
+  updatedAt: string;
+  locale: AppLocale;
+  messages: UIMessage[];
+};
+
+const toRuntimeMessages = (messages: StoredThreadMessage[]): UIMessage[] =>
+  messages
+    .filter((message) => message.text?.trim())
+    .map((message, index) => ({
+      id: message.id || `restored-${index + 1}`,
+      role:
+        message.role === "assistant" || message.role === "system"
+          ? message.role
+          : "user",
+      parts: [
+        {
+          type: "text",
+          text: message.text,
+        },
+      ],
+    }));
 
 const getInitialLocale = (): AppLocale => {
   if (typeof window === "undefined") {
@@ -60,9 +105,10 @@ export function LegalWorkspace() {
   const [locale, setLocale] = useState<AppLocale>(defaultLocale);
   const [panelOpen, setPanelOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
-  const [historyGroups, setHistoryGroups] = useState<
-    Array<{ label: string; items: string[] }>
-  >([]);
+  const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
+  const [activeThread, setActiveThread] = useState<ActiveThread | null>(null);
+  const [activeThreadVersion, setActiveThreadVersion] = useState(0);
+  const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocale(getInitialLocale());
@@ -74,6 +120,45 @@ export function LegalWorkspace() {
     window.localStorage.setItem(localeStorageKey, locale);
   }, [locale]);
 
+  const loadHistory = async (currentLocale: AppLocale) => {
+    const accessToken = await getApiAccessToken().catch(() => undefined);
+
+    if (!accessToken) {
+      setHistoryGroups([]);
+      return;
+    }
+
+    const response = await fetch(`/api/history?locale=${currentLocale}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }).catch(() => undefined);
+
+    if (!response?.ok) {
+      setHistoryGroups([]);
+      return;
+    }
+
+    const data = (await response.json()) as {
+      groups?: Array<{
+        label?: string;
+        items?: HistoryEntry[];
+      }>;
+    };
+
+    setHistoryGroups(
+      (data.groups ?? [])
+        .filter((group) => group.label && Array.isArray(group.items))
+        .map((group) => ({
+          label: group.label!,
+          items: (group.items ?? []).filter(
+            (item) => !!item?.id && !!item?.title?.trim(),
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    );
+  };
+
   useEffect(() => {
     if (!isAuthEnabled()) {
       setHistoryGroups([]);
@@ -82,56 +167,16 @@ export function LegalWorkspace() {
 
     let cancelled = false;
 
-    const loadHistory = async () => {
-      const accessToken = await getApiAccessToken().catch(() => undefined);
-
-      if (!accessToken) {
-        if (!cancelled) {
-          setHistoryGroups([]);
-        }
-        return;
-      }
-
-      const response = await fetch(`/api/history?locale=${locale}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }).catch(() => undefined);
-
-      if (!response?.ok) {
-        if (!cancelled) {
-          setHistoryGroups([]);
-        }
-        return;
-      }
-
-      const data = (await response.json()) as {
-        groups?: Array<{
-          label?: string;
-          items?: Array<{ title?: string }>;
-        }>;
-      };
-
+    const pollHistory = async () => {
+      await loadHistory(locale);
       if (cancelled) {
         return;
       }
-
-      setHistoryGroups(
-        (data.groups ?? [])
-          .filter((group) => group.label && Array.isArray(group.items))
-          .map((group) => ({
-            label: group.label!,
-            items: (group.items ?? [])
-              .map((item) => item.title?.trim() ?? "")
-              .filter(Boolean),
-          }))
-          .filter((group) => group.items.length > 0),
-      );
     };
 
-    void loadHistory();
+    void pollHistory();
     const interval = window.setInterval(() => {
-      void loadHistory();
+      void pollHistory();
     }, 15000);
 
     return () => {
@@ -142,37 +187,53 @@ export function LegalWorkspace() {
 
   const copy = appCopy[locale];
   const isArabic = locale === "ar";
-  const runtime = useChatRuntime({
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    transport: new AssistantChatTransport({
-      api: "/api/chat",
-      prepareSendMessagesRequest: async (options) => {
-        const accessToken = await getApiAccessToken().catch((error) => {
-          console.error("Failed to acquire API access token", error);
-          return undefined;
-        });
 
-        return {
-          api: options.api,
-          body: {
-            ...(options.body ?? {}),
-            id: options.id,
-            messages: options.messages,
-            requestMetadata: options.requestMetadata,
-          },
-          credentials: options.credentials,
-          headers: {
-            ...(options.headers ?? {}),
-            ...(accessToken
-              ? {
-                  Authorization: `Bearer ${accessToken}`,
-                }
-              : {}),
-          },
+  const handleOpenThread = async (threadId: string) => {
+    setLoadingThreadId(threadId);
+    try {
+      const accessToken = await getApiAccessToken();
+      const response = await fetch(`/api/history/${encodeURIComponent(threadId)}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load thread ${threadId}.`);
+      }
+
+      const data = (await response.json()) as {
+        thread?: {
+          id: string;
+          title: string;
+          preview: string;
+          updatedAt: string;
+          locale: AppLocale;
+          messages: StoredThreadMessage[];
         };
-      },
-    }),
-  });
+      };
+
+      if (!data.thread) {
+        throw new Error("Thread payload missing.");
+      }
+
+      setActiveThread({
+        ...data.thread,
+        messages: toRuntimeMessages(data.thread.messages),
+      });
+      setLocale(data.thread.locale);
+      setActiveThreadVersion((current) => current + 1);
+    } catch (error) {
+      console.error("Failed to restore chat thread", error);
+    } finally {
+      setLoadingThreadId(null);
+    }
+  };
+
+  const handleNewChat = () => {
+    setActiveThread(null);
+    setActiveThreadVersion((current) => current + 1);
+  };
 
   const infoCards = useMemo(
     () => [
@@ -184,7 +245,11 @@ export function LegalWorkspace() {
   );
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <ChatRuntimeShell
+      key={`${activeThread?.id ?? "new"}:${activeThreadVersion}`}
+      activeThreadId={activeThread?.id}
+      initialMessages={activeThread?.messages ?? []}
+    >
       <main
         className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(38,53,139,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(205,170,72,0.18),_transparent_24%),linear-gradient(180deg,_#f6f4f0_0%,_#ece7de_100%)] px-3 py-3 text-slate-900 md:px-4 md:py-4"
       >
@@ -198,10 +263,13 @@ export function LegalWorkspace() {
                 locale={locale}
                 setLocale={setLocale}
                 isArabic={isArabic}
-                onNewChat={() => window.location.reload()}
+                onNewChat={handleNewChat}
                 historyOpen={historyOpen}
                 setHistoryOpen={setHistoryOpen}
                 historyGroups={historyGroups}
+                activeThreadId={activeThread?.id}
+                loadingThreadId={loadingThreadId}
+                onOpenThread={handleOpenThread}
               />
               {panelOpen ? (
                 <SupportPanel
@@ -236,17 +304,65 @@ export function LegalWorkspace() {
                 locale={locale}
                 setLocale={setLocale}
                 isArabic={isArabic}
-                onNewChat={() => window.location.reload()}
+                onNewChat={handleNewChat}
                 historyOpen={historyOpen}
                 setHistoryOpen={setHistoryOpen}
                 historyGroups={historyGroups}
+                activeThreadId={activeThread?.id}
+                loadingThreadId={loadingThreadId}
+                onOpenThread={handleOpenThread}
               />
             </>
           )}
         </div>
       </main>
-    </AssistantRuntimeProvider>
+    </ChatRuntimeShell>
   );
+}
+
+function ChatRuntimeShell({
+  activeThreadId,
+  initialMessages,
+  children,
+}: {
+  activeThreadId?: string;
+  initialMessages: UIMessage[];
+  children: ReactNode;
+}) {
+  const runtime = useChatRuntime({
+    messages: initialMessages,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    transport: new AssistantChatTransport({
+      api: "/api/chat",
+      prepareSendMessagesRequest: async (options) => {
+        const accessToken = await getApiAccessToken().catch((error) => {
+          console.error("Failed to acquire API access token", error);
+          return undefined;
+        });
+
+        return {
+          api: options.api,
+          body: {
+            ...(options.body ?? {}),
+            id: activeThreadId ?? options.id,
+            messages: options.messages,
+            requestMetadata: options.requestMetadata,
+          },
+          credentials: options.credentials,
+          headers: {
+            ...(options.headers ?? {}),
+            ...(accessToken
+              ? {
+                  Authorization: `Bearer ${accessToken}`,
+                }
+              : {}),
+          },
+        };
+      },
+    }),
+  });
+
+  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
 
 function Workspace({
@@ -319,6 +435,9 @@ function PrimaryNav({
   historyOpen,
   setHistoryOpen,
   historyGroups,
+  activeThreadId,
+  loadingThreadId,
+  onOpenThread,
 }: {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
@@ -326,7 +445,10 @@ function PrimaryNav({
   onNewChat: () => void;
   historyOpen: boolean;
   setHistoryOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  historyGroups: Array<{ label: string; items: string[] }>;
+  historyGroups: HistoryGroup[];
+  activeThreadId?: string;
+  loadingThreadId?: string | null;
+  onOpenThread: (threadId: string) => void;
 }) {
   const copy = appCopy[locale];
 
@@ -394,6 +516,9 @@ function PrimaryNav({
             historyOpen={historyOpen}
             setHistoryOpen={setHistoryOpen}
             groups={historyGroups}
+            activeThreadId={activeThreadId}
+            loadingThreadId={loadingThreadId}
+            onOpenThread={onOpenThread}
           />
         </nav>
 
@@ -420,12 +545,18 @@ function HistoryTree({
   historyOpen,
   setHistoryOpen,
   groups,
+  activeThreadId,
+  loadingThreadId,
+  onOpenThread,
 }: {
   locale: AppLocale;
   isArabic: boolean;
   historyOpen: boolean;
   setHistoryOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  groups: Array<{ label: string; items: string[] }>;
+  groups: HistoryGroup[];
+  activeThreadId?: string;
+  loadingThreadId?: string | null;
+  onOpenThread: (threadId: string) => void;
 }) {
   const copy = appCopy[locale];
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
@@ -440,11 +571,11 @@ function HistoryTree({
   }, [groups]);
 
   return (
-    <div className="min-h-0 overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar-accent/55">
+    <div className="min-h-0 overflow-hidden rounded-xl border border-white/8 bg-transparent">
       <button
         type="button"
         onClick={() => setHistoryOpen((current) => !current)}
-        className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 transition hover:bg-white/6 ${
+        className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 transition hover:bg-white/6 ${
           isArabic ? "flex-row-reverse text-right" : "text-left"
         }`}
       >
@@ -456,14 +587,14 @@ function HistoryTree({
             {copy.navHistory}
           </span>
           <span className="block text-[11px] text-sidebar-foreground/55">
-            {groups.length > 0 ? copy.navComingSoon : ""}
+            {groups.length > 0 ? "" : copy.navComingSoon}
           </span>
         </span>
         <ExpandIcon className="size-4 text-sidebar-primary" />
       </button>
 
       {historyOpen ? (
-        <div className="border-t border-white/10 px-3 pb-3 pt-2">
+        <div className="border-t border-white/8 px-3 pb-2 pt-2">
           {groups.length === 0 ? (
             <div
               className={`px-3 py-3 text-xs text-sidebar-foreground/55 ${
@@ -477,7 +608,7 @@ function HistoryTree({
             const GroupIcon = isOpen ? ChevronDownIcon : isArabic ? ChevronLeftIcon : ChevronRightIcon;
 
             return (
-              <div key={group.label} className="border-b border-white/6 last:border-b-0">
+              <div key={group.label} className="last:border-b-0">
                 <button
                   type="button"
                   onClick={() =>
@@ -486,7 +617,7 @@ function HistoryTree({
                       [group.label]: !isOpen,
                     }))
                   }
-                  className={`flex w-full items-center gap-2 px-2 py-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-sidebar-primary/82 transition hover:text-sidebar-primary ${
+                  className={`flex w-full items-center gap-2 px-1 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/45 transition hover:text-sidebar-foreground/65 ${
                     isArabic ? "flex-row-reverse text-right" : "text-left"
                   }`}
                 >
@@ -497,16 +628,30 @@ function HistoryTree({
                 {isOpen ? (
                   <div className="pb-2">
                     {group.items.length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="space-y-0.5">
                         {group.items.map((entry) => (
                           <button
-                            key={`${group.label}-${entry}`}
+                            key={entry.id}
                             type="button"
-                            className={`w-full rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-sm leading-6 text-sidebar-foreground/90 transition hover:border-sidebar-primary/25 hover:bg-white/12 hover:shadow-sm ${
+                            onClick={() => onOpenThread(entry.id)}
+                            className={`w-full rounded-lg px-2.5 py-2 text-sm leading-6 transition ${
+                              entry.id === activeThreadId
+                                ? "bg-white/10 text-sidebar-foreground shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                                : "text-sidebar-foreground/82 hover:bg-white/6"
+                            } ${
                               isArabic ? "text-right" : "text-left"
                             }`}
                           >
-                            {entry}
+                            <span className="block truncate font-medium">
+                              {entry.title}
+                            </span>
+                            <span className="block truncate text-xs text-sidebar-foreground/48">
+                              {loadingThreadId === entry.id
+                                ? locale === "ar"
+                                  ? "جاري التحميل..."
+                                  : "Loading..."
+                                : entry.preview}
+                            </span>
                           </button>
                         ))}
                       </div>

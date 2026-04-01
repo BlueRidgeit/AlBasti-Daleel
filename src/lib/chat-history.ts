@@ -4,7 +4,7 @@ import type { UIMessage } from "ai";
 import { env, hasAzureCosmosConfig } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n";
 
-type StoredMessage = {
+export type StoredMessage = {
   id: string;
   role: string;
   text: string;
@@ -23,6 +23,13 @@ type ThreadDocument = {
   messages: StoredMessage[];
 };
 
+export type ThreadHistoryItem = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  preview: string;
+};
+
 type SessionDocument = {
   id: string;
   userId: string;
@@ -36,12 +43,16 @@ type SessionDocument = {
 
 export type HistoryGroup = {
   label: string;
-  items: Array<{
-    id: string;
-    title: string;
-    updatedAt: string;
-    preview: string;
-  }>;
+  items: ThreadHistoryItem[];
+};
+
+export type RestoredThread = {
+  id: string;
+  title: string;
+  preview: string;
+  updatedAt: string;
+  locale: AppLocale;
+  messages: StoredMessage[];
 };
 
 let cosmosClient: CosmosClient | null = null;
@@ -307,4 +318,33 @@ export async function listThreadHistory(args: {
     label,
     items,
   }));
+}
+
+export async function getThreadById(args: {
+  userId: string;
+  threadId: string;
+}) {
+  const resources = await ensureContainers();
+  if (!resources) {
+    return undefined;
+  }
+
+  const result = await resources.threads
+    .item(args.threadId, args.userId)
+    .read<ThreadDocument>()
+    .catch(() => undefined);
+
+  const thread = result?.resource;
+  if (!thread || thread.type !== "thread") {
+    return undefined;
+  }
+
+  return {
+    id: thread.id,
+    title: thread.title,
+    preview: thread.preview,
+    updatedAt: thread.updatedAt,
+    locale: thread.locale,
+    messages: thread.messages,
+  } satisfies RestoredThread;
 }
