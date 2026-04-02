@@ -589,7 +589,7 @@ function PrimaryNav({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-        <nav className="space-y-3">
+        <div className="space-y-3">
           <NavButton
             icon={FilePlus2Icon}
             label={copy.navNewChat}
@@ -607,7 +607,7 @@ function PrimaryNav({
             loadingThreadId={loadingThreadId}
             onOpenThread={onOpenThread}
           />
-        </nav>
+        </div>
 
         <section className="mt-4 rounded-2xl border border-sidebar-primary/35 bg-[linear-gradient(180deg,rgba(205,170,72,0.18),rgba(255,255,255,0.08))] p-4">
           <p
@@ -658,7 +658,7 @@ function HistoryTree({
   }, [groups]);
 
   return (
-    <div className="min-h-0 overflow-hidden rounded-xl border border-white/8 bg-transparent">
+    <div className="mt-3 min-h-0 flex flex-1 flex-col overflow-hidden rounded-xl border border-white/8 bg-transparent">
       <button
         type="button"
         onClick={() => setHistoryOpen((current) => !current)}
@@ -681,7 +681,7 @@ function HistoryTree({
       </button>
 
       {historyOpen ? (
-        <div className="border-t border-white/8 px-3 pb-2 pt-2">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/8 px-3 pb-2 pt-2">
           {groups.length === 0 ? (
             <div
               className={`px-3 py-3 text-xs text-sidebar-foreground/55 ${
