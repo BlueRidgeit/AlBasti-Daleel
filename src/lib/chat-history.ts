@@ -113,7 +113,7 @@ const ensureContainers = async () => {
 };
 
 const truncate = (value: string, max = 140) =>
-  value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+  value.length <= max ? value : `${value.slice(0, max - 3)}...`;
 
 const extractMessageText = (message: UIMessage | StoredMessage) => {
   if ("text" in message) {
@@ -347,4 +347,26 @@ export async function getThreadById(args: {
     locale: thread.locale,
     messages: thread.messages,
   } satisfies RestoredThread;
+}
+
+export async function deleteThreadById(args: {
+  userId: string;
+  threadId: string;
+}) {
+  const resources = await ensureContainers();
+  if (!resources) {
+    return false;
+  }
+
+  const existing = await resources.threads
+    .item(args.threadId, args.userId)
+    .read<ThreadDocument>()
+    .catch(() => undefined);
+
+  if (!existing?.resource || existing.resource.type !== "thread") {
+    return false;
+  }
+
+  await resources.threads.item(args.threadId, args.userId).delete();
+  return true;
 }

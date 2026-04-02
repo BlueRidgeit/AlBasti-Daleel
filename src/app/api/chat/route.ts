@@ -227,7 +227,7 @@ export async function POST(req: Request) {
           }
         : {}),
     },
-    stopWhen: stepCountIs(5),
+    stopWhen: stepCountIs(12),
     onFinish: async (event) => {
       if (!authenticatedUser?.objectId) {
         return;
