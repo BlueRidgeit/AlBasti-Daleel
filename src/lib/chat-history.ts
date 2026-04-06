@@ -329,12 +329,24 @@ export async function getThreadById(args: {
     return undefined;
   }
 
-  const result = await resources.threads
-    .item(args.threadId, args.userId)
-    .read<ThreadDocument>()
+  const query = await resources.threads.items
+    .query<ThreadDocument>(
+      {
+        query:
+          "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'thread' AND c.id = @threadId",
+        parameters: [
+          { name: "@userId", value: args.userId },
+          { name: "@threadId", value: args.threadId },
+        ],
+      },
+      {
+        partitionKey: args.userId,
+      },
+    )
+    .fetchAll()
     .catch(() => undefined);
 
-  const thread = result?.resource;
+  const thread = query?.resources?.[0];
   if (!thread || thread.type !== "thread") {
     return undefined;
   }
@@ -358,12 +370,9 @@ export async function deleteThreadById(args: {
     return false;
   }
 
-  const existing = await resources.threads
-    .item(args.threadId, args.userId)
-    .read<ThreadDocument>()
-    .catch(() => undefined);
+  const existing = await getThreadById(args);
 
-  if (!existing?.resource || existing.resource.type !== "thread") {
+  if (!existing) {
     return false;
   }
 
