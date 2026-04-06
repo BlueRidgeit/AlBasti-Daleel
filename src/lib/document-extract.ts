@@ -43,15 +43,35 @@ export const extractTextFromDocument = async (
   }
 
   if (mimeType === "application/pdf" || extension === ".pdf") {
+    const canvasModule = await import("@napi-rs/canvas");
     const pdfParseModule = await import("pdf-parse");
-    const pdfParse: (source: Buffer) => Promise<{ text: string }> =
-      "default" in pdfParseModule
-        ? (pdfParseModule.default as (source: Buffer) => Promise<{ text: string }>)
-        : (pdfParseModule as unknown as (
-            source: Buffer,
-          ) => Promise<{ text: string }>);
-    const parsed = await pdfParse(buffer);
-    return parsed.text;
+    const runtimeScope = globalThis as typeof globalThis & {
+      DOMMatrix?: typeof canvasModule.DOMMatrix;
+      Path2D?: typeof canvasModule.Path2D;
+      ImageData?: typeof canvasModule.ImageData;
+    };
+
+    runtimeScope.DOMMatrix ??= canvasModule.DOMMatrix;
+    runtimeScope.Path2D ??= canvasModule.Path2D;
+    runtimeScope.ImageData ??= canvasModule.ImageData;
+
+    const { PDFParse } = pdfParseModule as unknown as {
+      PDFParse: new (options: {
+        data: Uint8Array;
+      }) => {
+        getText: () => Promise<{ text: string }>;
+        destroy: () => Promise<void>;
+      };
+    };
+
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+
+    try {
+      const parsed = await parser.getText();
+      return parsed.text;
+    } finally {
+      await parser.destroy().catch(() => undefined);
+    }
   }
 
   throw new Error(
