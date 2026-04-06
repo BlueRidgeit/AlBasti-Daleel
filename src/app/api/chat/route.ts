@@ -145,7 +145,9 @@ export async function POST(req: Request) {
           itemId: z
             .string()
             .min(1)
-            .describe("The SharePoint drive item id for the document."),
+            .describe(
+              "The exact itemId returned by search_documents for the target file, or a resolvable document reference such as the exact indexed filename.",
+            ),
           question: z
             .string()
             .optional()
@@ -161,7 +163,9 @@ export async function POST(req: Request) {
           itemId: z
             .string()
             .min(1)
-            .describe("The SharePoint drive item id for the document."),
+            .describe(
+              "The exact itemId returned by search_documents for the target file, or a resolvable document reference such as the exact indexed filename.",
+            ),
         }),
         execute: async ({ itemId }) =>
           validateDocumentAccess(

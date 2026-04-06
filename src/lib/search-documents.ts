@@ -12,6 +12,10 @@ type AzureSearchHit = {
   "@search.captions"?: AzureSearchCaption[];
   id?: string;
   title?: string;
+  fileName?: string;
+  documentId?: string;
+  itemId?: string;
+  sharepointItemId?: string;
   url?: string;
   lastModified?: string;
   content?: string;
@@ -55,6 +59,18 @@ const extractItemIdFromChunkId = (chunkId: string) => {
   const separatorIndex = chunkId.indexOf("-");
   return separatorIndex === -1 ? chunkId : chunkId.slice(0, separatorIndex);
 };
+
+const normalizeReference = (value: string) =>
+  value.trim().replace(/\s+/g, " ").toLowerCase();
+
+const resolveCanonicalItemId = (hit: AzureSearchHit) =>
+  hit.documentId?.trim() ||
+  hit.itemId?.trim() ||
+  hit.sharepointItemId?.trim() ||
+  (hit.id ? extractItemIdFromChunkId(hit.id) : undefined);
+
+const resolveDisplayTitle = (hit: AzureSearchHit) =>
+  hit.title?.trim() || hit.fileName?.trim() || resolveCanonicalItemId(hit) || "Untitled document";
 
 async function runAzureSearch(body: Record<string, unknown>) {
   if (!hasAzureSearchConfig) {
@@ -103,7 +119,7 @@ export async function searchDocuments(
   const response = await runAzureSearch({
     search: query.trim() || "*",
     top: Math.min(Math.max(top * 3, 6), 30),
-    select: "id,title,url,lastModified,content",
+    select: "id,title,fileName,documentId,itemId,sharepointItemId,url,lastModified,content",
     queryType: useSemantic ? "semantic" : "simple",
     ...(useSemantic
       ? {
@@ -116,11 +132,11 @@ export async function searchDocuments(
   const deduped = new Map<string, SearchDocumentMatch>();
 
   for (const hit of response.value ?? []) {
-    if (!hit.id || !hit.title) {
+    const itemId = resolveCanonicalItemId(hit);
+    if (!hit.id || !itemId) {
       continue;
     }
 
-    const itemId = extractItemIdFromChunkId(hit.id);
     const score = hit["@search.rerankerScore"] ?? hit["@search.score"] ?? 0;
     const existing = deduped.get(itemId);
 
@@ -131,7 +147,7 @@ export async function searchDocuments(
     deduped.set(itemId, {
       itemId,
       chunkId: hit.id,
-      title: hit.title,
+      title: resolveDisplayTitle(hit),
       url: hit.url,
       lastModified: hit.lastModified,
       snippet: getSnippet(hit),
@@ -161,6 +177,74 @@ export type ReadDocumentFallbackResult = {
   caveats: string[];
 };
 
+export type IndexedDocumentReference = {
+  itemId?: string;
+  title?: string;
+  url?: string;
+  lastModified?: string;
+};
+
+export async function resolveIndexedDocumentReference(
+  reference: string,
+  question?: string,
+): Promise<IndexedDocumentReference | undefined> {
+  if (!hasAzureSearchConfig) {
+    return undefined;
+  }
+
+  const trimmedReference = reference.trim();
+  if (!trimmedReference) {
+    return undefined;
+  }
+
+  const useSemantic =
+    Boolean(question?.trim()) && Boolean(env.azureSearchSemanticConfiguration);
+
+  const response = await runAzureSearch({
+    search: trimmedReference,
+    top: 25,
+    select: "id,title,fileName,documentId,itemId,sharepointItemId,url,lastModified,content",
+    queryType: useSemantic ? "semantic" : "simple",
+    ...(useSemantic
+      ? {
+          semanticConfiguration: env.azureSearchSemanticConfiguration,
+          captions: "extractive",
+        }
+      : {}),
+  }).catch(() => undefined);
+
+  if (!response?.value?.length) {
+    return undefined;
+  }
+
+  const normalizedReference = normalizeReference(trimmedReference);
+  const exactMatch = response.value.find((hit) => {
+    const candidates = [
+      hit.title,
+      hit.fileName,
+      hit.documentId,
+      hit.itemId,
+      hit.sharepointItemId,
+      resolveCanonicalItemId(hit),
+      hit.url,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .map(normalizeReference);
+
+    return candidates.includes(normalizedReference);
+  });
+
+  const bestMatch = exactMatch ?? response.value[0];
+  const itemId = resolveCanonicalItemId(bestMatch);
+
+  return {
+    itemId,
+    title: resolveDisplayTitle(bestMatch),
+    url: bestMatch.url,
+    lastModified: bestMatch.lastModified,
+  };
+}
+
 export async function readIndexedDocument(
   itemId: string,
   question?: string,
@@ -178,7 +262,7 @@ export async function readIndexedDocument(
   const response = await runAzureSearch({
     search: trimmedQuestion || "*",
     top: 50,
-    select: "id,title,url,lastModified,content",
+    select: "id,title,fileName,documentId,itemId,sharepointItemId,url,lastModified,content",
     queryType: useSemantic ? "semantic" : "simple",
     ...(useSemantic
       ? {
@@ -189,17 +273,18 @@ export async function readIndexedDocument(
   });
 
   const hits = (response.value ?? []).filter((hit) => {
-    if (!hit.id) {
+    const resolvedItemId = resolveCanonicalItemId(hit);
+    if (!hit.id || !resolvedItemId) {
       return false;
     }
 
-    return extractItemIdFromChunkId(hit.id) === itemId;
+    return resolvedItemId === itemId;
   });
   const first = hits[0];
 
   return {
     itemId,
-    title: first?.title,
+    title: first ? resolveDisplayTitle(first) : undefined,
     url: first?.url,
     lastModified: first?.lastModified,
     strategy: "indexed-retrieval-fallback",

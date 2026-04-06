@@ -3,7 +3,10 @@ import {
   pickRelevantSections,
 } from "@/lib/document-extract";
 import { env, hasServerAuthConfig } from "@/lib/env";
-import { readIndexedDocument } from "@/lib/search-documents";
+import {
+  readIndexedDocument,
+  resolveIndexedDocumentReference,
+} from "@/lib/search-documents";
 
 type GraphItemMetadata = {
   id: string;
@@ -61,6 +64,15 @@ const appendCaveat = async (
     caveats: [...fallback.caveats, caveat],
   };
 };
+
+const looksLikePlaceholderReference = (value: string) =>
+  /^\[.*\]$/.test(value.trim()) ||
+  value.includes("Document ID for") ||
+  value.includes("document id") ||
+  value.includes("item id");
+
+const looksLikeFilenameReference = (value: string) =>
+  /\.[a-z0-9]{2,6}$/i.test(value.trim());
 
 const readLiveDocument = async ({
   accessToken,
@@ -164,6 +176,7 @@ export async function readDocument(
   graphAccessToken?: string,
   graphAccessError?: string,
 ): Promise<ReadDocumentResult> {
+  const requestedItemId = itemId.trim();
   const accessToken = getGraphAccessToken(request, graphAccessToken);
 
   if (!env.sharePointDriveId) {
@@ -176,7 +189,7 @@ export async function readDocument(
 
   if (!accessToken) {
     return appendCaveat(
-      itemId,
+      requestedItemId,
       question,
       graphAccessError
         ? `Live SharePoint reading could not start because Microsoft Graph access could not be acquired for the signed-in user. ${graphAccessError}`
@@ -186,21 +199,41 @@ export async function readDocument(
     );
   }
 
+  const indexedReference = await resolveIndexedDocumentReference(
+    requestedItemId,
+    question,
+  ).catch(() => undefined);
+  const resolvedItemId = indexedReference?.itemId ?? requestedItemId;
+
+  if (
+    !indexedReference?.itemId &&
+    (looksLikePlaceholderReference(requestedItemId) ||
+      looksLikeFilenameReference(requestedItemId))
+  ) {
+    return appendCaveat(
+      requestedItemId,
+      question,
+      "Live SharePoint reading could not start because the provided document reference was not a valid SharePoint item id. Use the exact itemId returned by search_documents, or ask Daleel to locate the file first.",
+    );
+  }
+
   try {
     return await readLiveDocument({
       accessToken,
-      metadataPath: `/drives/${env.sharePointDriveId}/items/${itemId}?$select=id,name,webUrl,lastModifiedDateTime,file`,
-      contentPath: `/drives/${env.sharePointDriveId}/items/${itemId}/content`,
-      itemId,
+      metadataPath: `/drives/${env.sharePointDriveId}/items/${resolvedItemId}?$select=id,name,webUrl,lastModifiedDateTime,file`,
+      contentPath: `/drives/${env.sharePointDriveId}/items/${resolvedItemId}/content`,
+      itemId: resolvedItemId,
       question,
     });
   } catch (error) {
     const details =
       error instanceof Error ? error.message : "Unknown SharePoint read error.";
 
-    const indexedMetadata = await readIndexedDocument(itemId, undefined).catch(
-      () => undefined,
-    );
+    const indexedMetadata =
+      indexedReference ??
+      (await readIndexedDocument(resolvedItemId, undefined).catch(
+        () => undefined,
+      ));
 
     if (indexedMetadata?.url) {
       try {
@@ -210,7 +243,7 @@ export async function readDocument(
           accessToken,
           metadataPath: `/shares/${shareToken}/driveItem?$select=id,name,webUrl,lastModifiedDateTime,file`,
           contentPath: `/shares/${shareToken}/driveItem/content`,
-          itemId,
+          itemId: resolvedItemId,
           question,
         });
       } catch (shareError) {
@@ -224,7 +257,7 @@ export async function readDocument(
             ? `The signed-in user could not open this SharePoint file through the direct drive route, and the share-link route also failed. Direct route: ${details} Share-link route: ${shareDetails}`
             : `A live SharePoint read failed on both the direct drive route and the share-link route. Direct route: ${details} Share-link route: ${shareDetails}`;
 
-        return appendCaveat(itemId, question, combinedCaveat);
+        return appendCaveat(resolvedItemId, question, combinedCaveat);
       }
     }
 
@@ -233,7 +266,7 @@ export async function readDocument(
         ? "The signed-in user could not open this SharePoint file with their current permissions, so the answer fell back to indexed retrieval."
         : `A live SharePoint read failed, so the answer fell back to indexed retrieval. Details: ${details}`;
 
-    return appendCaveat(itemId, question, accessCaveat);
+    return appendCaveat(resolvedItemId, question, accessCaveat);
   }
 }
 
@@ -243,6 +276,7 @@ export async function validateDocumentAccess(
   graphAccessToken?: string,
   graphAccessError?: string,
 ): Promise<ValidateDocumentAccessResult> {
+  const requestedItemId = itemId.trim();
   const accessToken = getGraphAccessToken(request, graphAccessToken);
 
   if (!env.sharePointDriveId) {
@@ -257,7 +291,7 @@ export async function validateDocumentAccess(
 
   if (!accessToken) {
     return {
-      itemId,
+      itemId: requestedItemId,
       canAccess: false,
       method: "graph-token-unavailable",
       reason: graphAccessError
@@ -266,7 +300,29 @@ export async function validateDocumentAccess(
     };
   }
 
-  const metadataPath = `/drives/${env.sharePointDriveId}/items/${itemId}?$select=id,name,webUrl,lastModifiedDateTime,file`;
+  const indexedReference = await resolveIndexedDocumentReference(
+    requestedItemId,
+  ).catch(() => undefined);
+  const resolvedItemId = indexedReference?.itemId ?? requestedItemId;
+
+  if (
+    !indexedReference?.itemId &&
+    (looksLikePlaceholderReference(requestedItemId) ||
+      looksLikeFilenameReference(requestedItemId))
+  ) {
+    return {
+      itemId: requestedItemId,
+      title: indexedReference?.title,
+      url: indexedReference?.url,
+      lastModified: indexedReference?.lastModified,
+      canAccess: false,
+      method: "direct-drive-route",
+      reason:
+        "The provided document reference was not a valid SharePoint item id. Use the exact itemId returned by search_documents, or search for the file first.",
+    };
+  }
+
+  const metadataPath = `/drives/${env.sharePointDriveId}/items/${resolvedItemId}?$select=id,name,webUrl,lastModifiedDateTime,file`;
 
   try {
     const metadata = await fetchDocumentMetadata({
@@ -275,7 +331,7 @@ export async function validateDocumentAccess(
     });
 
     return {
-      itemId,
+      itemId: resolvedItemId,
       title: metadata.name,
       url: metadata.webUrl,
       lastModified: metadata.lastModifiedDateTime,
@@ -288,9 +344,11 @@ export async function validateDocumentAccess(
     const directDetails =
       directError instanceof Error ? directError.message : "Unknown direct-route error.";
 
-    const indexedMetadata = await readIndexedDocument(itemId, undefined).catch(
-      () => undefined,
-    );
+    const indexedMetadata =
+      indexedReference ??
+      (await readIndexedDocument(resolvedItemId, undefined).catch(
+        () => undefined,
+      ));
 
     if (indexedMetadata?.url) {
       try {
@@ -301,7 +359,7 @@ export async function validateDocumentAccess(
         });
 
         return {
-          itemId,
+          itemId: resolvedItemId,
           title: metadata.name,
           url: metadata.webUrl,
           lastModified: metadata.lastModifiedDateTime,
@@ -318,7 +376,7 @@ export async function validateDocumentAccess(
             : "Unknown share-link-route error.";
 
         return {
-          itemId,
+          itemId: resolvedItemId,
           title: indexedMetadata.title,
           url: indexedMetadata.url,
           lastModified: indexedMetadata.lastModified,
@@ -332,7 +390,7 @@ export async function validateDocumentAccess(
     }
 
     return {
-      itemId,
+      itemId: resolvedItemId,
       canAccess: false,
       method: "direct-drive-route",
       reason:

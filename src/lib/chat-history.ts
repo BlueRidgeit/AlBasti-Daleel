@@ -275,27 +275,42 @@ export async function logSessionEvent(args: {
   await resources.sessions.items.create(document);
 }
 
-export async function listThreadHistory(args: {
-  userId: string;
-  locale: AppLocale;
-}) {
+async function queryThreadDocumentsForUser(userId: string) {
   const resources = await ensureContainers();
   if (!resources) {
-    return [] satisfies HistoryGroup[];
+    return [] satisfies ThreadDocument[];
   }
 
-  const { resources: threads } = await resources.threads.items
+  const result = await resources.threads.items
     .query<ThreadDocument>(
       {
         query: "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'thread'",
-        parameters: [{ name: "@userId", value: args.userId }],
+        parameters: [{ name: "@userId", value: userId }],
       },
       {
-        partitionKey: args.userId,
+        partitionKey: userId,
       },
     )
     .fetchAll();
 
+  return result.resources;
+}
+
+const toRestoredThread = (thread: ThreadDocument) =>
+  ({
+    id: thread.id,
+    title: thread.title,
+    preview: thread.preview,
+    updatedAt: thread.updatedAt,
+    locale: thread.locale,
+    messages: thread.messages,
+  }) satisfies RestoredThread;
+
+export async function listThreadHistory(args: {
+  userId: string;
+  locale: AppLocale;
+}) {
+  const threads = await queryThreadDocumentsForUser(args.userId);
   const sortedThreads = [...threads].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
@@ -324,41 +339,14 @@ export async function getThreadById(args: {
   userId: string;
   threadId: string;
 }) {
-  const resources = await ensureContainers();
-  if (!resources) {
+  const threads = await queryThreadDocumentsForUser(args.userId);
+  const thread = threads.find((entry) => entry.id === args.threadId);
+
+  if (!thread) {
     return undefined;
   }
 
-  const query = await resources.threads.items
-    .query<ThreadDocument>(
-      {
-        query:
-          "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'thread' AND c.id = @threadId",
-        parameters: [
-          { name: "@userId", value: args.userId },
-          { name: "@threadId", value: args.threadId },
-        ],
-      },
-      {
-        partitionKey: args.userId,
-      },
-    )
-    .fetchAll()
-    .catch(() => undefined);
-
-  const thread = query?.resources?.[0];
-  if (!thread || thread.type !== "thread") {
-    return undefined;
-  }
-
-  return {
-    id: thread.id,
-    title: thread.title,
-    preview: thread.preview,
-    updatedAt: thread.updatedAt,
-    locale: thread.locale,
-    messages: thread.messages,
-  } satisfies RestoredThread;
+  return toRestoredThread(thread);
 }
 
 export async function deleteThreadById(args: {

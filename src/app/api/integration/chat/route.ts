@@ -191,11 +191,13 @@ export async function POST(request: Request) {
         read_document: tool({
           description:
             "Read a specific document in more detail. Prefer this tool for summaries or close analysis of a chosen file.",
-          inputSchema: z.object({
-            itemId: z
-              .string()
-              .min(1)
-              .describe("The SharePoint drive item id for the document."),
+        inputSchema: z.object({
+          itemId: z
+            .string()
+            .min(1)
+            .describe(
+              "The exact itemId returned by search_documents for the target file, or a resolvable document reference such as the exact indexed filename.",
+            ),
             question: z
               .string()
               .optional()
@@ -213,12 +215,14 @@ export async function POST(request: Request) {
         validate_document_access: tool({
           description:
             "Validate whether the current signed-in user can access a specific SharePoint document.",
-          inputSchema: z.object({
-            itemId: z
-              .string()
-              .min(1)
-              .describe("The SharePoint drive item id for the document."),
-          }),
+        inputSchema: z.object({
+          itemId: z
+            .string()
+            .min(1)
+            .describe(
+              "The exact itemId returned by search_documents for the target file, or a resolvable document reference such as the exact indexed filename.",
+            ),
+        }),
           execute: async ({ itemId }) =>
             validateDocumentAccess(
               request,
