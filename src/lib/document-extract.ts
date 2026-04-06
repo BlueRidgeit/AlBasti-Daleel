@@ -44,7 +44,6 @@ export const extractTextFromDocument = async (
 
   if (mimeType === "application/pdf" || extension === ".pdf") {
     const canvasModule = await import("@napi-rs/canvas");
-    const pdfParseModule = await import("pdf-parse");
     const runtimeScope = globalThis as typeof globalThis & {
       DOMMatrix?: typeof canvasModule.DOMMatrix;
       Path2D?: typeof canvasModule.Path2D;
@@ -54,6 +53,8 @@ export const extractTextFromDocument = async (
     runtimeScope.DOMMatrix ??= canvasModule.DOMMatrix;
     runtimeScope.Path2D ??= canvasModule.Path2D;
     runtimeScope.ImageData ??= canvasModule.ImageData;
+
+    const pdfParseModule = await import("pdf-parse");
 
     const { PDFParse } = pdfParseModule as unknown as {
       PDFParse: new (options: {
