@@ -38,6 +38,7 @@ import {
 import type { AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
+const panelStorageKey = "albasti-search-chat-panel-open";
 
 type HistoryEntry = {
   id: string;
@@ -139,6 +140,23 @@ const getInitialLocale = (fallback: AppLocale): AppLocale => {
   return window.navigator.language.toLowerCase().startsWith("ar") ? "ar" : fallback;
 };
 
+const getInitialPanelOpen = () => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const saved = window.localStorage.getItem(panelStorageKey);
+  if (saved === "0") {
+    return false;
+  }
+
+  if (saved === "1") {
+    return true;
+  }
+
+  return true;
+};
+
 export function LegalWorkspace({
   initialLocale = defaultLocale,
 }: {
@@ -146,7 +164,7 @@ export function LegalWorkspace({
 }) {
   const [locale, setLocale] = useState<AppLocale>(initialLocale);
   const [localeHydrated, setLocaleHydrated] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(getInitialPanelOpen);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
   const [activeThread, setActiveThread] = useState<ActiveThread | null>(null);
@@ -168,6 +186,14 @@ export function LegalWorkspace({
     window.localStorage.setItem(localeStorageKey, locale);
     document.cookie = `${localeStorageKey}=${locale}; path=/; max-age=31536000; samesite=lax`;
   }, [locale, localeHydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(panelStorageKey, panelOpen ? "1" : "0");
+  }, [panelOpen]);
 
   const loadHistory = async (currentLocale: AppLocale) => {
     const accessToken = await getApiAccessToken().catch(() => undefined);
@@ -324,7 +350,7 @@ export function LegalWorkspace({
 
   return (
     <ChatRuntimeShell
-      key={`runtime:${activeThreadVersion}`}
+      key={`runtime:${activeThread?.id ?? "new"}:${activeThreadVersion}`}
       activeThreadId={activeThread?.id}
       initialMessages={activeThread?.messages ?? []}
       onThreadActivity={handleThreadActivity}
@@ -350,13 +376,13 @@ export function LegalWorkspace({
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
               />
-              {panelOpen ? (
+              <PanelSlot open={panelOpen}>
                 <SupportPanel
                   locale={locale}
                   isArabic={isArabic}
                   infoCards={infoCards}
                 />
-              ) : null}
+              </PanelSlot>
               <Workspace
                 locale={locale}
                 isArabic={isArabic}
@@ -374,13 +400,13 @@ export function LegalWorkspace({
                 setPanelOpen={setPanelOpen}
                 title={workspaceTitle}
               />
-              {panelOpen ? (
+              <PanelSlot open={panelOpen}>
                 <SupportPanel
                   locale={locale}
                   isArabic={isArabic}
                   infoCards={infoCards}
                 />
-              ) : null}
+              </PanelSlot>
               <PrimaryNav
                 locale={locale}
                 setLocale={setLocale}
@@ -459,6 +485,25 @@ function ChatRuntimeShell({
   return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
 
+function PanelSlot({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      aria-hidden={!open}
+      className={`hidden overflow-hidden transition-[width,opacity] duration-300 ease-out lg:flex ${
+        open ? "w-[330px] opacity-100" : "w-0 opacity-0"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
 function Workspace({
   locale,
   isArabic,
@@ -485,7 +530,7 @@ function Workspace({
         <div
           className={`flex flex-col gap-4 ${isArabic ? "text-right" : "text-left"} md:flex-row md:items-start md:justify-between`}
         >
-          <div className={`flex items-start gap-3 ${isArabic ? "md:flex-row-reverse" : ""}`}>
+          <div className="flex items-start gap-3">
             <button
               type="button"
               onClick={() => setPanelOpen((current) => !current)}
@@ -493,11 +538,13 @@ function Workspace({
               aria-label={panelOpen ? copy.navCollapsePanel : copy.navExpandPanel}
               title={panelOpen ? copy.navCollapsePanel : copy.navExpandPanel}
             >
-              {panelOpen ? (
-                <CollapseIcon className="size-4" />
-              ) : (
-                <ExpandIcon className="size-4" />
-              )}
+              <span className="inline-flex transition-transform duration-300 ease-out">
+                {panelOpen ? (
+                  <CollapseIcon className="size-4" />
+                ) : (
+                  <ExpandIcon className="size-4" />
+                )}
+              </span>
             </button>
             <div>
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
@@ -780,7 +827,7 @@ function SupportPanel({
   return (
     <aside
       dir={isArabic ? "rtl" : "ltr"}
-      className={`hidden min-h-0 w-[330px] shrink-0 flex-col bg-white/72 lg:flex ${
+      className={`flex min-h-0 w-[330px] shrink-0 flex-col bg-white/72 ${
         isArabic ? "border-l border-slate-200/80" : "border-r border-slate-200/80"
       }`}
     >
