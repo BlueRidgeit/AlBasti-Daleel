@@ -119,7 +119,7 @@ export async function searchDocuments(
   const response = await runAzureSearch({
     search: query.trim() || "*",
     top: Math.min(Math.max(top * 3, 6), 30),
-    select: "id,title,fileName,documentId,itemId,sharepointItemId,url,lastModified,content",
+    select: "id,title,url,lastModified,content",
     queryType: useSemantic ? "semantic" : "simple",
     ...(useSemantic
       ? {
@@ -203,7 +203,6 @@ export async function resolveIndexedDocumentReference(
   const response = await runAzureSearch({
     search: trimmedReference,
     top: 25,
-    select: "id,title,fileName,documentId,itemId,sharepointItemId,url,lastModified,content",
     queryType: useSemantic ? "semantic" : "simple",
     ...(useSemantic
       ? {
@@ -262,7 +261,7 @@ export async function readIndexedDocument(
   const response = await runAzureSearch({
     search: trimmedQuestion || "*",
     top: 50,
-    select: "id,title,fileName,documentId,itemId,sharepointItemId,url,lastModified,content",
+    select: "id,title,url,lastModified,content",
     queryType: useSemantic ? "semantic" : "simple",
     ...(useSemantic
       ? {

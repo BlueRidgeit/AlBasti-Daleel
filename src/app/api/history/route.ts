@@ -1,5 +1,5 @@
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-server";
-import { listThreadHistory } from "@/lib/chat-history";
+import { getThreadById, listThreadHistory } from "@/lib/chat-history";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,22 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const threadId = searchParams.get("threadId")?.trim();
     const locale = searchParams.get("locale") === "en" ? "en" : "ar";
+
+    if (threadId) {
+      const thread = await getThreadById({
+        userId: user.objectId,
+        threadId,
+      });
+
+      if (!thread) {
+        return Response.json({ error: "Thread not found." }, { status: 404 });
+      }
+
+      return Response.json({ thread });
+    }
+
     const groups = await listThreadHistory({
       userId: user.objectId,
       locale,
