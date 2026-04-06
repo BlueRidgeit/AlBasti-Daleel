@@ -39,6 +39,7 @@ import type { AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
 const panelStorageKey = "albasti-search-chat-panel-open";
+const localThreadIdPrefix = "__LOCALID_";
 
 type HistoryEntry = {
   id: string;
@@ -157,6 +158,18 @@ const getInitialPanelOpen = () => {
   return true;
 };
 
+const getResolvedThreadId = (activeThreadId?: string, runtimeThreadId?: string) => {
+  if (activeThreadId && !activeThreadId.startsWith(localThreadIdPrefix)) {
+    return activeThreadId;
+  }
+
+  if (runtimeThreadId && !runtimeThreadId.startsWith(localThreadIdPrefix)) {
+    return runtimeThreadId;
+  }
+
+  return crypto.randomUUID();
+};
+
 export function LegalWorkspace({
   initialLocale = defaultLocale,
 }: {
@@ -227,7 +240,10 @@ export function LegalWorkspace({
         .map((group) => ({
           label: group.label!,
           items: (group.items ?? []).filter(
-            (item) => !!item?.id && !!item?.title?.trim(),
+            (item) =>
+              !!item?.id &&
+              !item.id.startsWith(localThreadIdPrefix) &&
+              !!item?.title?.trim(),
           ),
         }))
         .filter((group) => group.items.length > 0),
@@ -447,8 +463,7 @@ function ChatRuntimeShell({
     transport: new AssistantChatTransport({
       api: "/api/chat",
       prepareSendMessagesRequest: async (options) => {
-        const resolvedThreadId =
-          activeThreadId ?? options.id ?? crypto.randomUUID();
+        const resolvedThreadId = getResolvedThreadId(activeThreadId, options.id);
 
         onThreadActivity({
           threadId: resolvedThreadId,
@@ -644,6 +659,9 @@ function PrimaryNav({
             primary
             isArabic={isArabic}
           />
+        </div>
+
+        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
           <HistoryTree
             locale={locale}
             isArabic={isArabic}
