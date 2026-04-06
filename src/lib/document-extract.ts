@@ -43,45 +43,15 @@ export const extractTextFromDocument = async (
   }
 
   if (mimeType === "application/pdf" || extension === ".pdf") {
-    const pdf2jsonModule = await import("pdf2json");
-    const PDFParser =
-      "default" in pdf2jsonModule
-        ? pdf2jsonModule.default
-        : pdf2jsonModule.PDFParser;
-
-    if (typeof PDFParser !== "function") {
-      throw new Error("Unable to initialize PDF parser.");
-    }
-
-    const parser = new PDFParser(undefined, 1);
-
-    const rawText = await new Promise<string>((resolve, reject) => {
-      const cleanup = () => {
-        parser.removeAllListeners("pdfParser_dataError");
-        parser.removeAllListeners("pdfParser_dataReady");
-      };
-
-      parser.once(
-        "pdfParser_dataError",
-        (error: { parserError?: Error } | Error) => {
-          cleanup();
-          reject(
-            error instanceof Error
-              ? error
-              : error?.parserError ?? new Error("Unknown PDF parsing error."),
-          );
-        },
-      );
-
-      parser.once("pdfParser_dataReady", () => {
-        cleanup();
-        resolve(parser.getRawTextContent());
-      });
-
-      parser.parseBuffer(buffer);
-    });
-
-    return rawText;
+    const pdfParseModule = await import("pdf-parse");
+    const pdfParse: (source: Buffer) => Promise<{ text: string }> =
+      "default" in pdfParseModule
+        ? (pdfParseModule.default as (source: Buffer) => Promise<{ text: string }>)
+        : (pdfParseModule as unknown as (
+            source: Buffer,
+          ) => Promise<{ text: string }>);
+    const parsed = await pdfParse(buffer);
+    return parsed.text;
   }
 
   throw new Error(
