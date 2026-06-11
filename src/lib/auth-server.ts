@@ -114,10 +114,50 @@ export async function acquireGraphTokenOnBehalfOf(token: string) {
   return result.accessToken;
 }
 
+// App-only (client-credentials) Graph token — used by admin endpoints to enumerate
+// SharePoint document libraries (drives) with the app's Application permissions.
+export async function acquireGraphAppToken() {
+  if (!hasServerAuthConfig) {
+    return undefined;
+  }
+
+  const result = await getConfidentialClient().acquireTokenByClientCredential({
+    scopes: ["https://graph.microsoft.com/.default"],
+  });
+
+  if (!result?.accessToken) {
+    throw new Error("Failed to acquire an app-only Microsoft Graph token.");
+  }
+
+  return result.accessToken;
+}
+
+const GLOBAL_ADMIN_ROLE_TEMPLATE_ID = "62e90394-69f5-4237-9190-012177145e10";
+
+// Detect the Entra "Global Administrator" directory role from the token's `wids` claim
+// (the list of tenant-wide role template ids assigned to the signed-in user).
+export const isGlobalAdminPayload = (payload?: JWTPayload): boolean => {
+  if (!payload) {
+    return false;
+  }
+
+  const wids = (payload as { wids?: unknown }).wids;
+  if (!Array.isArray(wids)) {
+    return false;
+  }
+
+  return wids.some(
+    (value) =>
+      typeof value === "string" &&
+      value.toLowerCase() === GLOBAL_ADMIN_ROLE_TEMPLATE_ID,
+  );
+};
+
 export type AuthenticatedUser = {
   displayName?: string;
   email?: string;
   objectId?: string;
+  isGlobalAdmin?: boolean;
 };
 
 export const mapAuthenticatedUser = (
@@ -132,6 +172,7 @@ export const mapAuthenticatedUser = (
     email:
       String(payload.preferred_username ?? payload.upn ?? "") || undefined,
     objectId: String(payload.oid ?? payload.sub ?? "") || undefined,
+    isGlobalAdmin: isGlobalAdminPayload(payload),
   };
 };
 

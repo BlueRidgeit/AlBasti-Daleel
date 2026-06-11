@@ -44,6 +44,10 @@ export const env = {
     trimToUndefined(process.env.AZURE_SEARCH_SEMANTIC_CONFIGURATION) ??
     trimToUndefined(process.env.AZURE_SEARCH_SEMANTIC_CONFIG),
   sharePointDriveId: trimToUndefined(process.env.SHAREPOINT_DRIVE_ID),
+  sharePointSiteId: trimToUndefined(process.env.SHAREPOINT_SITE_ID),
+  indexerBaseUrl:
+    trimToUndefined(process.env.INDEXER_BASE_URL) ?? "http://localhost:7071",
+  indexerFunctionKey: trimToUndefined(process.env.INDEXER_FUNCTION_KEY),
   nextPublicAzureTenantId: trimToUndefined(
     process.env.NEXT_PUBLIC_AZURE_TENANT_ID,
   ),

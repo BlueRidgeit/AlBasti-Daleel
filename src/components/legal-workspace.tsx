@@ -27,6 +27,7 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 
 import { Assistant } from "@/app/assistant";
 import { AuthRequired, AuthStatus } from "@/components/auth-status";
+import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
 import { getApiAccessToken } from "@/lib/auth-browser";
 import {
@@ -209,6 +210,7 @@ export function LegalWorkspace({
   const [selectedLibraries, setSelectedLibraries] = useState<string[]>(
     getInitialSelectedLibraries,
   );
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   useEffect(() => {
     setLocale(getInitialLocale(initialLocale));
@@ -267,6 +269,35 @@ export function LegalWorkspace({
       JSON.stringify(selectedLibraries),
     );
   }, [selectedLibraries]);
+
+  useEffect(() => {
+    if (!localeHydrated || !isAuthEnabled()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const accessToken = await getApiAccessToken().catch(() => undefined);
+      if (!accessToken) {
+        return;
+      }
+      const response = await fetch("/api/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => undefined);
+      if (!response?.ok) {
+        return;
+      }
+      const data = (await response.json()) as { isGlobalAdmin?: boolean };
+      if (!cancelled) {
+        setIsGlobalAdmin(Boolean(data?.isGlobalAdmin));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [localeHydrated]);
 
   const loadHistory = async (currentLocale: AppLocale) => {
     const accessToken = await getApiAccessToken().catch(() => undefined);
@@ -462,6 +493,7 @@ export function LegalWorkspace({
                 activeThreadId={activeThread?.id}
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
+                isGlobalAdmin={isGlobalAdmin}
               />
               <PanelSlot open={panelOpen}>
                 <SupportPanel
@@ -513,6 +545,7 @@ export function LegalWorkspace({
                 activeThreadId={activeThread?.id}
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
+                isGlobalAdmin={isGlobalAdmin}
               />
             </>
           )}
@@ -672,6 +705,7 @@ function PrimaryNav({
   activeThreadId,
   loadingThreadId,
   onOpenThread,
+  isGlobalAdmin,
 }: {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
@@ -683,6 +717,7 @@ function PrimaryNav({
   activeThreadId?: string;
   loadingThreadId?: string | null;
   onOpenThread: (threadId: string) => void;
+  isGlobalAdmin: boolean;
 }) {
   const copy = appCopy[locale];
 
@@ -741,6 +776,9 @@ function PrimaryNav({
             primary
             isArabic={isArabic}
           />
+          {isGlobalAdmin ? (
+            <LibraryManager locale={locale} isArabic={isArabic} />
+          ) : null}
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-hidden">
