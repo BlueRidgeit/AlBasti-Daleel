@@ -127,6 +127,11 @@ export const appCopy = {
     supportPanelTitle: "لوحة المساعد",
     supportPanelDescription:
       "يمكنك تصغير هذه اللوحة أو توسيعها للوصول إلى التوجيهات السريعة ومطالبات البداية.",
+    librariesTitle: "مكتبات البحث",
+    librariesClear: "الكل",
+    librariesEmpty: "لا توجد مكتبات مفهرسة بعد.",
+    librariesAllHint: "يشمل البحث جميع المكتبات.",
+    librariesScopedHint: "يقتصر البحث على المكتبات المحددة.",
   },
   en: {
     badge: "Al-Basti Legal AI",
@@ -187,5 +192,10 @@ export const appCopy = {
     supportPanelTitle: "Assistant panel",
     supportPanelDescription:
       "Collapse or expand this panel for quick guidance and starter prompts.",
+    librariesTitle: "Search libraries",
+    librariesClear: "All",
+    librariesEmpty: "No indexed libraries yet.",
+    librariesAllHint: "Searching across all libraries.",
+    librariesScopedHint: "Search limited to the selected libraries.",
   },
 } as const;
