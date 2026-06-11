@@ -167,12 +167,16 @@ export const mapAuthenticatedUser = (
     return undefined;
   }
 
+  const upn = String(payload.preferred_username ?? payload.upn ?? "").toLowerCase();
+
   return {
     displayName: String(payload.name ?? "") || undefined,
     email:
       String(payload.preferred_username ?? payload.upn ?? "") || undefined,
     objectId: String(payload.oid ?? payload.sub ?? "") || undefined,
-    isGlobalAdmin: isGlobalAdminPayload(payload),
+    isGlobalAdmin:
+      isGlobalAdminPayload(payload) ||
+      (upn.length > 0 && env.adminUpns.includes(upn)),
   };
 };
 

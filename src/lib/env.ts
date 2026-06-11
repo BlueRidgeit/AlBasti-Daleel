@@ -48,6 +48,13 @@ export const env = {
   indexerBaseUrl:
     trimToUndefined(process.env.INDEXER_BASE_URL) ?? "http://localhost:7071",
   indexerFunctionKey: trimToUndefined(process.env.INDEXER_FUNCTION_KEY),
+  // Explicit admin allowlist (UPNs/emails) — treated as Global Admins even when the
+  // tenant's tokens don't carry the `wids` directory-role claim (e.g. v1 access tokens).
+  adminUpns:
+    trimToUndefined(process.env.ADMIN_UPNS)
+      ?.split(/[,\s]+/)
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean) ?? [],
   nextPublicAzureTenantId: trimToUndefined(
     process.env.NEXT_PUBLIC_AZURE_TENANT_ID,
   ),
