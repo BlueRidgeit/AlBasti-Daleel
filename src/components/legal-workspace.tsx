@@ -27,6 +27,7 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 
 import { Assistant } from "@/app/assistant";
 import { AuthRequired, AuthStatus } from "@/components/auth-status";
+import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
 import { getApiAccessToken } from "@/lib/auth-browser";
 import {
@@ -39,7 +40,13 @@ import type { AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
 const panelStorageKey = "albasti-search-chat-panel-open";
+const librariesStorageKey = "albasti-search-chat-libraries";
 const localThreadIdPrefix = "__LOCALID_";
+
+type LibraryOption = {
+  label: string;
+  count: number;
+};
 
 type HistoryEntry = {
   id: string;
@@ -158,6 +165,22 @@ const getInitialPanelOpen = () => {
   return true;
 };
 
+const getInitialSelectedLibraries = (): string[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const saved = window.localStorage.getItem(librariesStorageKey);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 const getResolvedThreadId = (activeThreadId?: string, runtimeThreadId?: string) => {
   if (activeThreadId && !activeThreadId.startsWith(localThreadIdPrefix)) {
     return activeThreadId;
@@ -183,6 +206,11 @@ export function LegalWorkspace({
   const [activeThread, setActiveThread] = useState<ActiveThread | null>(null);
   const [activeThreadVersion, setActiveThreadVersion] = useState(0);
   const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
+  const [libraries, setLibraries] = useState<LibraryOption[]>([]);
+  const [selectedLibraries, setSelectedLibraries] = useState<string[]>(
+    getInitialSelectedLibraries,
+  );
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   useEffect(() => {
     setLocale(getInitialLocale(initialLocale));
@@ -207,6 +235,69 @@ export function LegalWorkspace({
 
     window.localStorage.setItem(panelStorageKey, panelOpen ? "1" : "0");
   }, [panelOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/libraries")
+      .then((response) => (response.ok ? response.json() : { libraries: [] }))
+      .then((data: { libraries?: LibraryOption[] }) => {
+        if (!cancelled && Array.isArray(data.libraries)) {
+          setLibraries(
+            data.libraries.filter(
+              (entry) => typeof entry?.label === "string" && entry.label.trim(),
+            ),
+          );
+        }
+      })
+      .catch(() => {
+        /* libraries are optional; ignore fetch errors */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      librariesStorageKey,
+      JSON.stringify(selectedLibraries),
+    );
+  }, [selectedLibraries]);
+
+  useEffect(() => {
+    if (!localeHydrated || !isAuthEnabled()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const accessToken = await getApiAccessToken().catch(() => undefined);
+      if (!accessToken) {
+        return;
+      }
+      const response = await fetch("/api/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => undefined);
+      if (!response?.ok) {
+        return;
+      }
+      const data = (await response.json()) as { isGlobalAdmin?: boolean };
+      if (!cancelled) {
+        setIsGlobalAdmin(Boolean(data?.isGlobalAdmin));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [localeHydrated]);
 
   const loadHistory = async (currentLocale: AppLocale) => {
     const accessToken = await getApiAccessToken().catch(() => undefined);
@@ -355,6 +446,16 @@ export function LegalWorkspace({
     setActiveThreadVersion((current) => current + 1);
   };
 
+  const handleToggleLibrary = (label: string) => {
+    setSelectedLibraries((current) =>
+      current.includes(label)
+        ? current.filter((value) => value !== label)
+        : [...current, label],
+    );
+  };
+
+  const handleClearLibraries = () => setSelectedLibraries([]);
+
   const infoCards = useMemo(
     () => [
       { icon: FileSearch2Icon, ...copy.cards[0] },
@@ -370,6 +471,7 @@ export function LegalWorkspace({
       activeThreadId={activeThread?.id}
       initialMessages={activeThread?.messages ?? []}
       onThreadActivity={handleThreadActivity}
+      selectedLibraries={selectedLibraries}
     >
       <main
         className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(38,53,139,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(205,170,72,0.18),_transparent_24%),linear-gradient(180deg,_#f6f4f0_0%,_#ece7de_100%)] px-3 py-3 text-slate-900 md:px-4 md:py-4"
@@ -391,12 +493,17 @@ export function LegalWorkspace({
                 activeThreadId={activeThread?.id}
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
+                isGlobalAdmin={isGlobalAdmin}
               />
               <PanelSlot open={panelOpen}>
                 <SupportPanel
                   locale={locale}
                   isArabic={isArabic}
                   infoCards={infoCards}
+                  libraries={libraries}
+                  selectedLibraries={selectedLibraries}
+                  onToggleLibrary={handleToggleLibrary}
+                  onClearLibraries={handleClearLibraries}
                 />
               </PanelSlot>
               <Workspace
@@ -421,6 +528,10 @@ export function LegalWorkspace({
                   locale={locale}
                   isArabic={isArabic}
                   infoCards={infoCards}
+                  libraries={libraries}
+                  selectedLibraries={selectedLibraries}
+                  onToggleLibrary={handleToggleLibrary}
+                  onClearLibraries={handleClearLibraries}
                 />
               </PanelSlot>
               <PrimaryNav
@@ -434,6 +545,7 @@ export function LegalWorkspace({
                 activeThreadId={activeThread?.id}
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
+                isGlobalAdmin={isGlobalAdmin}
               />
             </>
           )}
@@ -447,6 +559,7 @@ function ChatRuntimeShell({
   activeThreadId,
   initialMessages,
   onThreadActivity,
+  selectedLibraries,
   children,
 }: {
   activeThreadId?: string;
@@ -455,6 +568,7 @@ function ChatRuntimeShell({
     threadId: string;
     messages: UIMessage[];
   }) => void;
+  selectedLibraries: string[];
   children: ReactNode;
 }) {
   const runtime = useChatRuntime({
@@ -481,6 +595,7 @@ function ChatRuntimeShell({
             ...(options.body ?? {}),
             id: resolvedThreadId,
             messages: options.messages,
+            selectedLibraries,
             requestMetadata: options.requestMetadata,
           },
           credentials: options.credentials,
@@ -590,6 +705,7 @@ function PrimaryNav({
   activeThreadId,
   loadingThreadId,
   onOpenThread,
+  isGlobalAdmin,
 }: {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
@@ -601,6 +717,7 @@ function PrimaryNav({
   activeThreadId?: string;
   loadingThreadId?: string | null;
   onOpenThread: (threadId: string) => void;
+  isGlobalAdmin: boolean;
 }) {
   const copy = appCopy[locale];
 
@@ -659,6 +776,9 @@ function PrimaryNav({
             primary
             isArabic={isArabic}
           />
+          {isGlobalAdmin ? (
+            <LibraryManager locale={locale} isArabic={isArabic} />
+          ) : null}
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-hidden">
@@ -831,6 +951,10 @@ function SupportPanel({
   locale,
   isArabic,
   infoCards,
+  libraries,
+  selectedLibraries,
+  onToggleLibrary,
+  onClearLibraries,
 }: {
   locale: AppLocale;
   isArabic: boolean;
@@ -839,6 +963,10 @@ function SupportPanel({
     title: string;
     description: string;
   }[];
+  libraries: LibraryOption[];
+  selectedLibraries: string[];
+  onToggleLibrary: (label: string) => void;
+  onClearLibraries: () => void;
 }) {
   const copy = appCopy[locale];
 
@@ -873,6 +1001,15 @@ function SupportPanel({
           ))}
         </div>
 
+        <LibraryFilter
+          locale={locale}
+          isArabic={isArabic}
+          libraries={libraries}
+          selected={selectedLibraries}
+          onToggle={onToggleLibrary}
+          onClear={onClearLibraries}
+        />
+
         <section className="mt-5 rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(205,170,72,0.12),rgba(255,255,255,0.82))] p-4">
           <p
             className={`text-xs font-semibold uppercase tracking-[0.2em] text-primary/70 ${
@@ -893,6 +1030,92 @@ function SupportPanel({
         </section>
       </div>
     </aside>
+  );
+}
+
+function LibraryFilter({
+  locale,
+  isArabic,
+  libraries,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  locale: AppLocale;
+  isArabic: boolean;
+  libraries: LibraryOption[];
+  selected: string[];
+  onToggle: (label: string) => void;
+  onClear: () => void;
+}) {
+  const copy = appCopy[locale];
+
+  return (
+    <section className="mt-5 rounded-2xl border border-primary/10 bg-white/70 p-4">
+      <div
+        className={`flex items-center gap-2 ${
+          isArabic ? "flex-row-reverse text-right" : "text-left"
+        }`}
+      >
+        <p className="flex-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">
+          {copy.librariesTitle}
+        </p>
+        {selected.length > 0 ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-primary/80 transition hover:bg-primary/10"
+          >
+            {copy.librariesClear}
+          </button>
+        ) : null}
+      </div>
+
+      {libraries.length === 0 ? (
+        <p
+          className={`mt-3 text-xs text-slate-500 ${
+            isArabic ? "text-right" : "text-left"
+          }`}
+        >
+          {copy.librariesEmpty}
+        </p>
+      ) : (
+        <div className="mt-3 space-y-1.5">
+          {libraries.map((library) => {
+            const checked = selected.includes(library.label);
+            return (
+              <label
+                key={library.label}
+                className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-sm transition ${
+                  checked
+                    ? "border-primary/40 bg-primary/5 text-slate-900"
+                    : "border-slate-200/80 bg-white/60 text-slate-700 hover:border-primary/20"
+                } ${isArabic ? "flex-row-reverse text-right" : "text-left"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(library.label)}
+                  className="size-4 shrink-0 accent-primary"
+                />
+                <span className="min-w-0 flex-1 truncate">{library.label}</span>
+                <span className="shrink-0 text-[11px] text-slate-400">
+                  {library.count}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      <p
+        className={`mt-2 text-[11px] text-slate-500 ${
+          isArabic ? "text-right" : "text-left"
+        }`}
+      >
+        {selected.length === 0 ? copy.librariesAllHint : copy.librariesScopedHint}
+      </p>
+    </section>
   );
 }
 

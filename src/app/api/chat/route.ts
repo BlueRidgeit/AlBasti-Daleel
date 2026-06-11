@@ -47,6 +47,13 @@ export async function POST(req: Request) {
     messages: Array.isArray(payload?.messages) ? payload.messages : [],
     tools: payload?.tools,
   };
+  // Library filter selected in the UI (Phase 4). Enforced server-side so it constrains the
+  // search regardless of what the model passes to the tool.
+  const selectedLibraries = Array.isArray(payload?.selectedLibraries)
+    ? (payload.selectedLibraries as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : undefined;
   const threadId = id ?? crypto.randomUUID();
   const uploadedDocuments = collectUploadedDocuments(messages);
   const modelMessages = sanitizeMessagesForModel(messages, uploadedDocuments);
@@ -136,6 +143,7 @@ export async function POST(req: Request) {
         execute: async ({ query, top }) =>
           searchDocuments(query, {
             top,
+            libraries: selectedLibraries,
           }),
       }),
       read_document: tool({

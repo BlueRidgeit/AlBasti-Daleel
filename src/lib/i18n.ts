@@ -127,6 +127,19 @@ export const appCopy = {
     supportPanelTitle: "لوحة المساعد",
     supportPanelDescription:
       "يمكنك تصغير هذه اللوحة أو توسيعها للوصول إلى التوجيهات السريعة ومطالبات البداية.",
+    librariesTitle: "مكتبات البحث",
+    librariesClear: "الكل",
+    librariesEmpty: "لا توجد مكتبات مفهرسة بعد.",
+    librariesAllHint: "يشمل البحث جميع المكتبات.",
+    librariesScopedHint: "يقتصر البحث على المكتبات المحددة.",
+    adminLibrariesTitle: "إدارة المكتبات",
+    adminLibrariesDesc:
+      "أضف مكتبات SharePoint إلى البحث. متاح لمسؤول عام (Global Administrator) فقط.",
+    adminLibrariesEmpty: "لا توجد مكتبات.",
+    adminLibrariesError: "تعذّر تحميل المكتبات.",
+    adminLibrariesIndexed: "مفهرسة",
+    adminLibrariesAdd: "فهرسة",
+    adminLibrariesAdding: "جارٍ الفهرسة…",
   },
   en: {
     badge: "Al-Basti Legal AI",
@@ -187,5 +200,18 @@ export const appCopy = {
     supportPanelTitle: "Assistant panel",
     supportPanelDescription:
       "Collapse or expand this panel for quick guidance and starter prompts.",
+    librariesTitle: "Search libraries",
+    librariesClear: "All",
+    librariesEmpty: "No indexed libraries yet.",
+    librariesAllHint: "Searching across all libraries.",
+    librariesScopedHint: "Search limited to the selected libraries.",
+    adminLibrariesTitle: "Manage libraries",
+    adminLibrariesDesc:
+      "Add SharePoint libraries to search. Global Administrators only.",
+    adminLibrariesEmpty: "No libraries found.",
+    adminLibrariesError: "Couldn't load libraries.",
+    adminLibrariesIndexed: "Indexed",
+    adminLibrariesAdd: "Index",
+    adminLibrariesAdding: "Indexing…",
   },
 } as const;

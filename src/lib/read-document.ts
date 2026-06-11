@@ -179,11 +179,20 @@ export async function readDocument(
   const requestedItemId = itemId.trim();
   const accessToken = getGraphAccessToken(request, graphAccessToken);
 
-  if (!env.sharePointDriveId) {
+  const indexedReference = await resolveIndexedDocumentReference(
+    requestedItemId,
+    question,
+  ).catch(() => undefined);
+  const resolvedItemId = indexedReference?.itemId ?? requestedItemId;
+  // Read from the document's own library drive (multi-library); fall back to the single
+  // legacy SHAREPOINT_DRIVE_ID when the index has no driveId for this item.
+  const resolvedDriveId = indexedReference?.driveId ?? env.sharePointDriveId;
+
+  if (!resolvedDriveId) {
     return appendCaveat(
       itemId,
       question,
-      "Live SharePoint reading is not configured because SHAREPOINT_DRIVE_ID is missing.",
+      "Live SharePoint reading is not configured because no drive id is available (set SHAREPOINT_DRIVE_ID or index the document with a driveId).",
     );
   }
 
@@ -198,12 +207,6 @@ export async function readDocument(
           : "Live SharePoint reading is not configured yet, so this answer is based on indexed retrieval fallback.",
     );
   }
-
-  const indexedReference = await resolveIndexedDocumentReference(
-    requestedItemId,
-    question,
-  ).catch(() => undefined);
-  const resolvedItemId = indexedReference?.itemId ?? requestedItemId;
 
   if (
     !indexedReference?.itemId &&
@@ -220,8 +223,8 @@ export async function readDocument(
   try {
     return await readLiveDocument({
       accessToken,
-      metadataPath: `/drives/${env.sharePointDriveId}/items/${resolvedItemId}?$select=id,name,webUrl,lastModifiedDateTime,file`,
-      contentPath: `/drives/${env.sharePointDriveId}/items/${resolvedItemId}/content`,
+      metadataPath: `/drives/${resolvedDriveId}/items/${resolvedItemId}?$select=id,name,webUrl,lastModifiedDateTime,file`,
+      contentPath: `/drives/${resolvedDriveId}/items/${resolvedItemId}/content`,
       itemId: resolvedItemId,
       question,
     });
@@ -279,13 +282,19 @@ export async function validateDocumentAccess(
   const requestedItemId = itemId.trim();
   const accessToken = getGraphAccessToken(request, graphAccessToken);
 
-  if (!env.sharePointDriveId) {
+  const indexedReference = await resolveIndexedDocumentReference(
+    requestedItemId,
+  ).catch(() => undefined);
+  const resolvedItemId = indexedReference?.itemId ?? requestedItemId;
+  const resolvedDriveId = indexedReference?.driveId ?? env.sharePointDriveId;
+
+  if (!resolvedDriveId) {
     return {
       itemId,
       canAccess: false,
       method: "configuration-missing",
       reason:
-        "Live SharePoint access validation is not configured because SHAREPOINT_DRIVE_ID is missing.",
+        "Live SharePoint access validation is not configured because no drive id is available (set SHAREPOINT_DRIVE_ID or index the document with a driveId).",
     };
   }
 
@@ -299,11 +308,6 @@ export async function validateDocumentAccess(
         : "Microsoft Graph access is not available for the current request.",
     };
   }
-
-  const indexedReference = await resolveIndexedDocumentReference(
-    requestedItemId,
-  ).catch(() => undefined);
-  const resolvedItemId = indexedReference?.itemId ?? requestedItemId;
 
   if (
     !indexedReference?.itemId &&
@@ -322,7 +326,7 @@ export async function validateDocumentAccess(
     };
   }
 
-  const metadataPath = `/drives/${env.sharePointDriveId}/items/${resolvedItemId}?$select=id,name,webUrl,lastModifiedDateTime,file`;
+  const metadataPath = `/drives/${resolvedDriveId}/items/${resolvedItemId}?$select=id,name,webUrl,lastModifiedDateTime,file`;
 
   try {
     const metadata = await fetchDocumentMetadata({
