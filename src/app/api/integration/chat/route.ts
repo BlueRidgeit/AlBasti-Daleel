@@ -110,6 +110,11 @@ export async function POST(request: Request) {
   }
 
   const locale = getLocale(payload?.locale, messages);
+  const selectedLibraries = Array.isArray(payload?.selectedLibraries)
+    ? (payload.selectedLibraries as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : undefined;
   const languageDirective = buildLanguageDirective(messages);
   const threadId =
     typeof payload?.id === "string" && payload.id.trim()
@@ -186,6 +191,7 @@ export async function POST(request: Request) {
           execute: async ({ query, top }) =>
             searchDocuments(query, {
               top,
+              libraries: selectedLibraries,
             }),
         }),
         read_document: tool({

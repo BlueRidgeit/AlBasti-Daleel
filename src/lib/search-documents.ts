@@ -16,6 +16,8 @@ type AzureSearchHit = {
   documentId?: string;
   itemId?: string;
   sharepointItemId?: string;
+  library?: string;
+  driveId?: string;
   url?: string;
   lastModified?: string;
   content?: string;
@@ -29,6 +31,8 @@ export type SearchDocumentMatch = {
   itemId: string;
   chunkId: string;
   title: string;
+  library?: string;
+  driveId?: string;
   url?: string;
   lastModified?: string;
   snippet: string;
@@ -44,9 +48,22 @@ export type SearchDocumentsResult = {
 
 type SearchDocumentsOptions = {
   top?: number;
+  libraries?: string[];
 };
 
 const normalizeEndpoint = (endpoint: string) => endpoint.replace(/\/$/, "");
+
+// Build an OData filter that restricts results to the selected document libraries.
+// Uses "|" as the value delimiter because library labels contain spaces, and the default
+// search.in delimiters (space and comma) would split multi-word labels like "Albasti Books".
+const buildLibraryFilter = (libraries?: string[]) => {
+  const values = (libraries ?? []).map((value) => value.trim()).filter(Boolean);
+  if (values.length === 0) {
+    return undefined;
+  }
+  const escaped = values.map((value) => value.replace(/'/g, "''")).join("|");
+  return `search.in(library, '${escaped}', '|')`;
+};
 
 const getSnippet = (hit: AzureSearchHit) => {
   const caption = hit["@search.captions"]?.find((entry) => entry.text)?.text;
@@ -102,7 +119,7 @@ async function runAzureSearch(body: Record<string, unknown>) {
 
 export async function searchDocuments(
   query: string,
-  { top = 6 }: SearchDocumentsOptions = {},
+  { top = 6, libraries }: SearchDocumentsOptions = {},
 ): Promise<SearchDocumentsResult> {
   if (!hasAzureSearchConfig) {
     return {
@@ -115,12 +132,14 @@ export async function searchDocuments(
 
   const useSemantic =
     Boolean(query.trim()) && Boolean(env.azureSearchSemanticConfiguration);
+  const libraryFilter = buildLibraryFilter(libraries);
 
   const response = await runAzureSearch({
     search: query.trim() || "*",
     top: Math.min(Math.max(top * 3, 6), 30),
-    select: "id,title,url,lastModified,content",
+    select: "id,title,url,lastModified,content,library,driveId,itemId",
     queryType: useSemantic ? "semantic" : "simple",
+    ...(libraryFilter ? { filter: libraryFilter } : {}),
     ...(useSemantic
       ? {
           semanticConfiguration: env.azureSearchSemanticConfiguration,
@@ -148,6 +167,8 @@ export async function searchDocuments(
       itemId,
       chunkId: hit.id,
       title: resolveDisplayTitle(hit),
+      library: hit.library?.trim() || undefined,
+      driveId: hit.driveId?.trim() || undefined,
       url: hit.url,
       lastModified: hit.lastModified,
       snippet: getSnippet(hit),
@@ -179,6 +200,7 @@ export type ReadDocumentFallbackResult = {
 
 export type IndexedDocumentReference = {
   itemId?: string;
+  driveId?: string;
   title?: string;
   url?: string;
   lastModified?: string;
@@ -238,6 +260,7 @@ export async function resolveIndexedDocumentReference(
 
   return {
     itemId,
+    driveId: bestMatch.driveId?.trim() || undefined,
     title: resolveDisplayTitle(bestMatch),
     url: bestMatch.url,
     lastModified: bestMatch.lastModified,
