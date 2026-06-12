@@ -1,11 +1,10 @@
 "use client";
 
-import { AssistantRuntimeProvider, ThreadPrimitive } from "@assistant-ui/react";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   AssistantChatTransport,
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
-import { useMsal } from "@azure/msal-react";
 import type { UIMessage } from "ai";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import Image from "next/image";
@@ -15,15 +14,13 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   FilePlus2Icon,
-  FileSearch2Icon,
   HistoryIcon,
   PanelLeftCloseIcon,
   PanelRightCloseIcon,
-  ShieldCheckIcon,
   SidebarOpenIcon,
-  ScaleIcon,
+  Trash2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 
 import { Assistant } from "@/app/assistant";
 import { AuthRequired, AuthStatus } from "@/components/auth-status";
@@ -34,7 +31,6 @@ import {
   appCopy,
   defaultLocale,
   localeLabels,
-  starterPrompts,
 } from "@/lib/i18n";
 import type { AppLocale } from "@/lib/i18n";
 
@@ -446,6 +442,39 @@ export function LegalWorkspace({
     setActiveThreadVersion((current) => current + 1);
   };
 
+  const handleDeleteThread = async (threadId: string) => {
+    if (!window.confirm(copy.historyDeleteConfirm)) {
+      return;
+    }
+
+    try {
+      const accessToken = await getApiAccessToken().catch(() => undefined);
+      if (!accessToken) {
+        return;
+      }
+
+      const response = await fetch(
+        `/api/history/${encodeURIComponent(threadId)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete thread ${threadId}.`);
+      }
+
+      if (activeThread?.id === threadId) {
+        handleNewChat();
+      }
+
+      await loadHistory(locale);
+    } catch (error) {
+      console.error("Failed to delete chat thread", error);
+    }
+  };
+
   const handleToggleLibrary = (label: string) => {
     setSelectedLibraries((current) =>
       current.includes(label)
@@ -455,15 +484,6 @@ export function LegalWorkspace({
   };
 
   const handleClearLibraries = () => setSelectedLibraries([]);
-
-  const infoCards = useMemo(
-    () => [
-      { icon: FileSearch2Icon, ...copy.cards[0] },
-      { icon: ScaleIcon, ...copy.cards[1] },
-      { icon: ShieldCheckIcon, ...copy.cards[2] },
-    ],
-    [copy.cards],
-  );
 
   return (
     <ChatRuntimeShell
@@ -493,13 +513,13 @@ export function LegalWorkspace({
                 activeThreadId={activeThread?.id}
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
+                onDeleteThread={handleDeleteThread}
                 isGlobalAdmin={isGlobalAdmin}
               />
               <PanelSlot open={panelOpen}>
                 <SupportPanel
                   locale={locale}
                   isArabic={isArabic}
-                  infoCards={infoCards}
                   libraries={libraries}
                   selectedLibraries={selectedLibraries}
                   onToggleLibrary={handleToggleLibrary}
@@ -527,7 +547,6 @@ export function LegalWorkspace({
                 <SupportPanel
                   locale={locale}
                   isArabic={isArabic}
-                  infoCards={infoCards}
                   libraries={libraries}
                   selectedLibraries={selectedLibraries}
                   onToggleLibrary={handleToggleLibrary}
@@ -545,6 +564,7 @@ export function LegalWorkspace({
                 activeThreadId={activeThread?.id}
                 loadingThreadId={loadingThreadId}
                 onOpenThread={handleOpenThread}
+                onDeleteThread={handleDeleteThread}
                 isGlobalAdmin={isGlobalAdmin}
               />
             </>
@@ -705,6 +725,7 @@ function PrimaryNav({
   activeThreadId,
   loadingThreadId,
   onOpenThread,
+  onDeleteThread,
   isGlobalAdmin,
 }: {
   locale: AppLocale;
@@ -717,6 +738,7 @@ function PrimaryNav({
   activeThreadId?: string;
   loadingThreadId?: string | null;
   onOpenThread: (threadId: string) => void;
+  onDeleteThread: (threadId: string) => void;
   isGlobalAdmin: boolean;
 }) {
   const copy = appCopy[locale];
@@ -733,17 +755,23 @@ function PrimaryNav({
           <div>
             <div className={`flex items-center gap-3 ${isArabic ? "flex-row-reverse justify-end" : ""}`}>
               <Image
-                src="/white-logo.png"
-                alt="Al Basti"
-                width={42}
-                height={42}
+                src="/daleel-logo.png"
+                alt="Daleel"
+                width={84}
+                height={84}
                 priority
-                className="h-10 w-10 object-contain"
+                className="h-20 w-20 object-contain"
               />
             </div>
             <h1 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-tight text-sidebar-foreground">
               {copy.title}
             </h1>
+            <p
+              className="mt-1 text-sm font-medium leading-snug"
+              style={{ color: "#f7941e" }}
+            >
+              {copy.tagline}
+            </p>
           </div>
 
           <div className={`flex ${isArabic ? "justify-end" : "justify-start"}`}>
@@ -791,6 +819,7 @@ function PrimaryNav({
             activeThreadId={activeThreadId}
             loadingThreadId={loadingThreadId}
             onOpenThread={onOpenThread}
+            onDeleteThread={onDeleteThread}
           />
         </div>
 
@@ -820,6 +849,7 @@ function HistoryTree({
   activeThreadId,
   loadingThreadId,
   onOpenThread,
+  onDeleteThread,
 }: {
   locale: AppLocale;
   isArabic: boolean;
@@ -829,6 +859,7 @@ function HistoryTree({
   activeThreadId?: string;
   loadingThreadId?: string | null;
   onOpenThread: (threadId: string) => void;
+  onDeleteThread: (threadId: string) => void;
 }) {
   const copy = appCopy[locale];
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
@@ -902,29 +933,44 @@ function HistoryTree({
                     {group.items.length > 0 ? (
                       <div className="space-y-0.5">
                         {group.items.map((entry) => (
-                          <button
+                          <div
                             key={entry.id}
-                            type="button"
-                            onClick={() => onOpenThread(entry.id)}
-                            className={`w-full rounded-lg px-2.5 py-2 text-sm leading-6 transition ${
-                              entry.id === activeThreadId
-                                ? "bg-white/10 text-sidebar-foreground shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
-                                : "text-sidebar-foreground/82 hover:bg-white/6"
-                            } ${
-                              isArabic ? "text-right" : "text-left"
-                            }`}
+                            className="group/item relative"
                           >
-                            <span className="block truncate font-medium">
-                              {entry.title}
-                            </span>
-                            <span className="block truncate text-xs text-sidebar-foreground/48">
-                              {loadingThreadId === entry.id
-                                ? locale === "ar"
-                                  ? "جاري التحميل..."
-                                  : "Loading..."
-                                : entry.preview}
-                            </span>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => onOpenThread(entry.id)}
+                              className={`w-full rounded-lg px-2.5 py-2 text-sm leading-6 transition ${
+                                entry.id === activeThreadId
+                                  ? "bg-white/10 text-sidebar-foreground shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                                  : "text-sidebar-foreground/82 hover:bg-white/6"
+                              } ${
+                                isArabic ? "pl-9 text-right" : "pr-9 text-left"
+                              }`}
+                            >
+                              <span className="block truncate font-medium">
+                                {entry.title}
+                              </span>
+                              <span className="block truncate text-xs text-sidebar-foreground/48">
+                                {loadingThreadId === entry.id
+                                  ? locale === "ar"
+                                    ? "جاري التحميل..."
+                                    : "Loading..."
+                                  : entry.preview}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteThread(entry.id)}
+                              aria-label={copy.historyDelete}
+                              title={copy.historyDelete}
+                              className={`absolute top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/55 opacity-0 transition hover:bg-red-500/15 hover:text-red-400 focus:opacity-100 group-hover/item:opacity-100 ${
+                                isArabic ? "left-1.5" : "right-1.5"
+                              }`}
+                            >
+                              <Trash2Icon className="size-3.5" />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -950,7 +996,6 @@ function HistoryTree({
 function SupportPanel({
   locale,
   isArabic,
-  infoCards,
   libraries,
   selectedLibraries,
   onToggleLibrary,
@@ -958,11 +1003,6 @@ function SupportPanel({
 }: {
   locale: AppLocale;
   isArabic: boolean;
-  infoCards: {
-    icon: ComponentType<{ className?: string }>;
-    title: string;
-    description: string;
-  }[];
   libraries: LibraryOption[];
   selectedLibraries: string[];
   onToggleLibrary: (label: string) => void;
@@ -989,18 +1029,6 @@ function SupportPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="grid gap-3">
-          {infoCards.map(({ icon, title, description }) => (
-            <InfoCard
-              key={title}
-              icon={icon}
-              title={title}
-              description={description}
-              isArabic={isArabic}
-            />
-          ))}
-        </div>
-
         <LibraryFilter
           locale={locale}
           isArabic={isArabic}
@@ -1009,25 +1037,6 @@ function SupportPanel({
           onToggle={onToggleLibrary}
           onClear={onClearLibraries}
         />
-
-        <section className="mt-5 rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(205,170,72,0.12),rgba(255,255,255,0.82))] p-4">
-          <p
-            className={`text-xs font-semibold uppercase tracking-[0.2em] text-primary/70 ${
-              isArabic ? "text-right" : "text-left"
-            }`}
-          >
-            {copy.starterPromptLabel}
-          </p>
-          <div className="mt-3 space-y-2">
-            {starterPrompts[locale].map((prompt) => (
-              <StarterPromptButton
-                key={prompt}
-                prompt={prompt}
-                isArabic={isArabic}
-              />
-            ))}
-          </div>
-        </section>
       </div>
     </aside>
   );
@@ -1119,89 +1128,6 @@ function LibraryFilter({
   );
 }
 
-function StarterPromptButton({
-  prompt,
-  isArabic,
-}: {
-  prompt: string;
-  isArabic: boolean;
-}) {
-  const [mounted, setMounted] = useState(false);
-  const authEnabled = mounted ? isAuthEnabled() : false;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <button
-        type="button"
-        disabled
-        className={`w-full cursor-not-allowed rounded-2xl border border-white bg-white/70 px-3 py-2 text-sm leading-6 text-slate-400 ${
-          isArabic ? "text-right" : "text-left"
-        }`}
-      >
-        {prompt}
-      </button>
-    );
-  }
-
-  if (!authEnabled) {
-    return (
-      <button
-        type="button"
-        disabled
-        className={`w-full cursor-not-allowed rounded-2xl border border-white bg-white/70 px-3 py-2 text-sm leading-6 text-slate-400 ${
-          isArabic ? "text-right" : "text-left"
-        }`}
-      >
-        {prompt}
-      </button>
-    );
-  }
-
-  return <AuthenticatedStarterPrompt prompt={prompt} isArabic={isArabic} />;
-}
-
-function AuthenticatedStarterPrompt({
-  prompt,
-  isArabic,
-}: {
-  prompt: string;
-  isArabic: boolean;
-}) {
-  const { instance, accounts } = useMsal();
-  const account = instance.getActiveAccount() ?? accounts[0];
-
-  if (!account) {
-    return (
-      <button
-        type="button"
-        disabled
-        className={`w-full cursor-not-allowed rounded-2xl border border-white bg-white/70 px-3 py-2 text-sm leading-6 text-slate-400 ${
-          isArabic ? "text-right" : "text-left"
-        }`}
-      >
-        {prompt}
-      </button>
-    );
-  }
-
-  return (
-    <ThreadPrimitive.Suggestion prompt={prompt} send asChild>
-      <button
-        type="button"
-        className={`w-full rounded-2xl border border-white bg-white px-3 py-2 text-sm leading-6 text-slate-700 transition hover:border-primary/20 hover:bg-white hover:shadow-sm ${
-          isArabic ? "text-right" : "text-left"
-        }`}
-      >
-        {prompt}
-      </button>
-    </ThreadPrimitive.Suggestion>
-  );
-}
-
 function NavButton({
   icon: Icon,
   label,
@@ -1261,31 +1187,5 @@ function NavButton({
     <button type="button" onClick={onClick} className={className}>
       {content}
     </button>
-  );
-}
-
-function InfoCard({
-  icon: Icon,
-  title,
-  description,
-  isArabic,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  isArabic: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
-      <div className={`flex items-start gap-3 ${isArabic ? "flex-row-reverse text-right" : "text-left"}`}>
-        <div className="rounded-2xl bg-primary p-2.5 text-primary-foreground">
-          <Icon className="size-4" />
-        </div>
-        <div>
-          <h3 className="font-semibold text-slate-950">{title}</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-700">{description}</p>
-        </div>
-      </div>
-    </div>
   );
 }

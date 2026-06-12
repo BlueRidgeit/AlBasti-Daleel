@@ -21,13 +21,12 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Al-Basti Search Chat",
-  description:
-    "A legal assistant workspace for Azure AI Search, SharePoint documents, and Foundry-style orchestration.",
+  title: "Daleel | Your AI Guide to Legal Intelligence",
+  description: "Daleel — your AI guide to legal intelligence.",
   icons: {
-    icon: "/albastilogo.png",
-    shortcut: "/albastilogo.png",
-    apple: "/albastilogo.png",
+    icon: "/daleel-logo.png",
+    shortcut: "/daleel-logo.png",
+    apple: "/daleel-logo.png",
   },
 };
 

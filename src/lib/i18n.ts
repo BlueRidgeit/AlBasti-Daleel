@@ -70,7 +70,8 @@ export const placeholderHistory = {
 export const appCopy = {
   ar: {
     badge: "الذكاء القانوني من البستي",
-    title: "مساعد قانوني واعٍ بمستندات SharePoint",
+    title: "دليل",
+    tagline: "ذكاءك الاصطناعي للمعلومات القانونية.",
     description:
       "ابحث في المستودع المفهرس بسرعة، ثم انتقل إلى قراءة أعمق للمستند عندما يحتاج المحامي إلى تفاصيل من الملف الأصلي.",
     cards: [
@@ -115,6 +116,8 @@ export const appCopy = {
     navLabel: "التنقل",
     navNewChat: "محادثة جديدة",
     navHistory: "سجل المحادثات",
+    historyDelete: "حذف",
+    historyDeleteConfirm: "حذف هذه المحادثة؟",
     navSettings: "إعدادات الحساب",
     navCollapsePanel: "إخفاء اللوحة الجانبية",
     navExpandPanel: "إظهار اللوحة الجانبية",
@@ -126,7 +129,7 @@ export const appCopy = {
     lockedButton: "المتابعة إلى تسجيل الدخول",
     supportPanelTitle: "لوحة المساعد",
     supportPanelDescription:
-      "يمكنك تصغير هذه اللوحة أو توسيعها للوصول إلى التوجيهات السريعة ومطالبات البداية.",
+      "حدّد المكتبات التي تريد قصر البحث عليها.",
     librariesTitle: "مكتبات البحث",
     librariesClear: "الكل",
     librariesEmpty: "لا توجد مكتبات مفهرسة بعد.",
@@ -146,7 +149,8 @@ export const appCopy = {
   },
   en: {
     badge: "Al-Basti Legal AI",
-    title: "SharePoint-aware legal assistant",
+    title: "Daleel",
+    tagline: "Your AI Guide to Legal Intelligence.",
     description:
       "Search the indexed repository quickly, then escalate to deeper document reads when a lawyer needs details from the underlying file.",
     cards: [
@@ -191,6 +195,8 @@ export const appCopy = {
     navLabel: "Navigation",
     navNewChat: "New chat",
     navHistory: "Chat history",
+    historyDelete: "Delete",
+    historyDeleteConfirm: "Delete this conversation?",
     navSettings: "Account settings",
     navCollapsePanel: "Collapse side panel",
     navExpandPanel: "Expand side panel",
@@ -202,7 +208,7 @@ export const appCopy = {
     lockedButton: "Continue to sign in",
     supportPanelTitle: "Assistant panel",
     supportPanelDescription:
-      "Collapse or expand this panel for quick guidance and starter prompts.",
+      "Choose which libraries to limit your search to.",
     librariesTitle: "Search libraries",
     librariesClear: "All",
     librariesEmpty: "No indexed libraries yet.",
