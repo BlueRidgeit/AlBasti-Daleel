@@ -85,6 +85,39 @@ export function LibraryManager({
     }
   };
 
+  const remove = async (library: AdminLibrary) => {
+    if (!window.confirm(copy.adminLibrariesRemoveConfirm)) {
+      return;
+    }
+    setBusyDriveId(library.driveId);
+    setError(null);
+    try {
+      const token = await getApiAccessToken().catch(() => undefined);
+      const response = await fetch("/api/admin/libraries", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ driveId: library.driveId, label: library.label }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setLibraries((current) =>
+        current.map((entry) =>
+          entry.driveId === library.driveId
+            ? { ...entry, indexed: false, count: 0 }
+            : entry,
+        ),
+      );
+    } catch {
+      setError(copy.adminLibrariesError);
+    } finally {
+      setBusyDriveId(null);
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -143,9 +176,16 @@ export function LibraryManager({
                     ) : null}
                   </span>
                   {library.indexed ? (
-                    <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                      {copy.adminLibrariesIndexed}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void remove(library)}
+                      disabled={busyDriveId === library.driveId}
+                      className="shrink-0 rounded-full border border-red-300 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                    >
+                      {busyDriveId === library.driveId
+                        ? copy.adminLibrariesRemoving
+                        : copy.adminLibrariesRemove}
+                    </button>
                   ) : (
                     <button
                       type="button"

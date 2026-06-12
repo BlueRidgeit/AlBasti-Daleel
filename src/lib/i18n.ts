@@ -140,6 +140,9 @@ export const appCopy = {
     adminLibrariesIndexed: "مفهرسة",
     adminLibrariesAdd: "فهرسة",
     adminLibrariesAdding: "جارٍ الفهرسة…",
+    adminLibrariesRemove: "إزالة",
+    adminLibrariesRemoving: "جارٍ الإزالة…",
+    adminLibrariesRemoveConfirm: "إزالة هذه المكتبة من البحث وحذف محتواها المفهرس؟",
   },
   en: {
     badge: "Al-Basti Legal AI",
@@ -213,5 +216,8 @@ export const appCopy = {
     adminLibrariesIndexed: "Indexed",
     adminLibrariesAdd: "Index",
     adminLibrariesAdding: "Indexing…",
+    adminLibrariesRemove: "Remove",
+    adminLibrariesRemoving: "Removing…",
+    adminLibrariesRemoveConfirm: "Remove this library from search and delete its indexed content?",
   },
 } as const;

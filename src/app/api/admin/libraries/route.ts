@@ -178,3 +178,56 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Un-index a library: remove it from the crawl list and delete its indexed chunks.
+export async function DELETE(request: Request) {
+  const denied = await adminGate(request);
+  if (denied) {
+    return denied;
+  }
+
+  const body = (await request.json().catch(() => undefined)) as
+    | { driveId?: string; label?: string }
+    | undefined;
+  const driveId = body?.driveId?.trim();
+  const label = body?.label?.trim();
+
+  if (!driveId) {
+    return Response.json({ error: "driveId is required." }, { status: 400 });
+  }
+
+  const url = `${env.indexerBaseUrl.replace(/\/$/, "")}/api/reindex?driveId=${encodeURIComponent(
+    driveId,
+  )}&library=${encodeURIComponent(label ?? "")}&action=remove`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: env.indexerFunctionKey
+        ? { "x-functions-key": env.indexerFunctionKey }
+        : {},
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+      return Response.json(
+        { error: `Indexer remove failed (${response.status}). ${text}` },
+        { status: 502 },
+      );
+    }
+
+    let indexer: unknown = text;
+    try {
+      indexer = JSON.parse(text);
+    } catch {
+      /* keep raw text */
+    }
+
+    return Response.json({ ok: true, indexer });
+  } catch {
+    return Response.json(
+      { error: "Could not reach the indexer. Is it running or deployed?" },
+      { status: 502 },
+    );
+  }
+}
