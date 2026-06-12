@@ -34,6 +34,11 @@ export const env = {
     trimToUndefined(process.env.AZURE_OPENAI_WEB_SEARCH_DEPLOYMENT) ??
     trimToUndefined(process.env.AZURE_OPENAI_CHAT_DEPLOYMENT) ??
     trimToUndefined(process.env.AZURE_OPENAI_DEPLOYMENT),
+  // Embeddings deployment for query-time hybrid (vector) search — same Azure OpenAI
+  // resource that indexed the documents (text-embedding-3-small).
+  azureOpenAIEmbeddingDeployment:
+    trimToUndefined(process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT) ??
+    "text-embedding-3-small",
   azureSearchEndpoint: trimToUndefined(process.env.AZURE_SEARCH_ENDPOINT),
   azureSearchApiKey: trimToUndefined(process.env.AZURE_SEARCH_API_KEY),
   azureSearchIndexName:

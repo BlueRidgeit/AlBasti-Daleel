@@ -117,6 +117,47 @@ async function runAzureSearch(body: Record<string, unknown>) {
   return (await response.json()) as AzureSearchResponse;
 }
 
+const EMBED_API_VERSION = "2024-02-15-preview";
+
+// Embed the query text for hybrid (keyword + vector) search. Returns undefined when the
+// embeddings deployment isn't configured or the call fails, so callers fall back to text-only.
+async function embedQuery(text: string): Promise<number[] | undefined> {
+  if (
+    !env.azureOpenAIApiKey ||
+    !env.azureOpenAIBaseUrl ||
+    !env.azureOpenAIEmbeddingDeployment
+  ) {
+    return undefined;
+  }
+
+  try {
+    const response = await fetch(
+      `${env.azureOpenAIBaseUrl}/deployments/${env.azureOpenAIEmbeddingDeployment}/embeddings?api-version=${EMBED_API_VERSION}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": env.azureOpenAIApiKey,
+        },
+        body: JSON.stringify({ input: text }),
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const data = (await response.json()) as {
+      data?: { embedding?: number[] }[];
+    };
+    const vector = data.data?.[0]?.embedding;
+    return Array.isArray(vector) ? vector : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function searchDocuments(
   query: string,
   { top = 6, libraries }: SearchDocumentsOptions = {},
@@ -130,16 +171,36 @@ export async function searchDocuments(
     };
   }
 
+  const trimmedQuery = query.trim();
   const useSemantic =
-    Boolean(query.trim()) && Boolean(env.azureSearchSemanticConfiguration);
+    Boolean(trimmedQuery) && Boolean(env.azureSearchSemanticConfiguration);
   const libraryFilter = buildLibraryFilter(libraries);
+  const candidateCount = Math.min(Math.max(top * 3, 6), 30);
+
+  // Hybrid retrieval: embed the query and add a vector query alongside the keyword search,
+  // so matching is robust to spelling/spacing/synonyms (important for Arabic). The results
+  // are fused (RRF) and, when configured, semantically reranked. Falls back to text-only
+  // search if the embedding can't be produced.
+  const queryVector = trimmedQuery ? await embedQuery(trimmedQuery) : undefined;
 
   const response = await runAzureSearch({
-    search: query.trim() || "*",
-    top: Math.min(Math.max(top * 3, 6), 30),
+    search: trimmedQuery || "*",
+    top: candidateCount,
     select: "id,title,url,lastModified,content,library,driveId,itemId",
     queryType: useSemantic ? "semantic" : "simple",
     ...(libraryFilter ? { filter: libraryFilter } : {}),
+    ...(queryVector
+      ? {
+          vectorQueries: [
+            {
+              kind: "vector",
+              vector: queryVector,
+              fields: "embedding",
+              k: candidateCount,
+            },
+          ],
+        }
+      : {}),
     ...(useSemantic
       ? {
           semanticConfiguration: env.azureSearchSemanticConfiguration,
