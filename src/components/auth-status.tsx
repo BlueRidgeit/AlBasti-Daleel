@@ -1,12 +1,17 @@
 "use client";
 
-import { Settings2Icon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronUpIcon,
+  LogOutIcon,
+  Settings2Icon,
+} from "lucide-react";
 import { useMsal } from "@azure/msal-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getLoginRequest, isAuthEnabled } from "@/lib/auth-client";
-import { appCopy, type AppLocale } from "@/lib/i18n";
+import { appCopy, localeLabels, type AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
 
@@ -207,6 +212,174 @@ function AuthenticatedStatus({ locale }: { locale: AppLocale }) {
         {copy.liveAccessRequiresSignIn}
       </div>
       <SignInButton locale={locale} />
+    </div>
+  );
+}
+
+// Bottom-of-sidebar account control: avatar + name with an upward dropdown
+// (Settings, Language, Sign out) — mirrors the Claude desktop account menu.
+export function AccountBar({
+  locale,
+  setLocale,
+}: {
+  locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
+}) {
+  const copy = appCopy[locale];
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  if (!isAuthEnabled()) {
+    return (
+      <div className="rounded-2xl border border-sidebar-border bg-sidebar-accent/40 px-3 py-2.5 text-xs text-sidebar-foreground/70">
+        {copy.authSetupPending}
+      </div>
+    );
+  }
+
+  return <AccountBarInner locale={locale} setLocale={setLocale} />;
+}
+
+function AccountBarInner({
+  locale,
+  setLocale,
+}: {
+  locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
+}) {
+  const { instance, accounts } = useMsal();
+  const copy = appCopy[locale];
+  const isArabic = locale === "ar";
+  const router = useRouter();
+  const account = instance.getActiveAccount() ?? accounts[0];
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const initials = useMemo(() => {
+    const source = (account?.name ?? account?.username ?? "").trim();
+    if (!source) return "U";
+    return source
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+  }, [account?.name, account?.username]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (!account) {
+    return (
+      <div className={`flex ${isArabic ? "justify-end" : "justify-start"}`}>
+        <SignInButton locale={locale} />
+      </div>
+    );
+  }
+
+  const handleSignOut = async () => {
+    window.localStorage.setItem(localeStorageKey, locale);
+    document.cookie = `${localeStorageKey}=${locale}; path=/; max-age=31536000; samesite=lax`;
+    await instance.logoutRedirect({
+      account,
+      postLogoutRedirectUri: `${window.location.origin}/`,
+    });
+  };
+
+  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/90 transition hover:bg-white/10 ${
+    isArabic ? "flex-row-reverse text-right" : "text-left"
+  }`;
+
+  return (
+    <div ref={ref} className="relative">
+      {open ? (
+        <div className="absolute bottom-full mb-2 w-full overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar p-1 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]">
+          <button
+            type="button"
+            className={itemCls}
+            onClick={() => {
+              setOpen(false);
+              router.push(`/settings?locale=${locale}`);
+            }}
+          >
+            <Settings2Icon className="size-4" />
+            <span className="flex-1">{copy.accountSettings}</span>
+          </button>
+
+          <div
+            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/45 ${
+              isArabic ? "text-right" : "text-left"
+            }`}
+          >
+            {copy.accountLanguage}
+          </div>
+          {(["ar", "en"] as AppLocale[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={itemCls}
+              onClick={() => {
+                setLocale(value);
+                setOpen(false);
+              }}
+            >
+              <span className="flex-1">{localeLabels[value]}</span>
+              {locale === value ? <CheckIcon className="size-4" /> : null}
+            </button>
+          ))}
+
+          <div className="my-1 h-px bg-white/10" />
+          <button
+            type="button"
+            className={`${itemCls} text-red-300 hover:bg-red-500/15 hover:text-red-200`}
+            onClick={handleSignOut}
+          >
+            <LogOutIcon className="size-4" />
+            <span className="flex-1">{copy.signOut}</span>
+          </button>
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className={`flex w-full items-center gap-3 rounded-2xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2.5 transition hover:bg-sidebar-accent ${
+          isArabic ? "flex-row-reverse text-right" : "text-left"
+        }`}
+      >
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+          {initials}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-sidebar-foreground">
+            {account.name ?? account.username}
+          </span>
+          <span className="block truncate text-[11px] text-sidebar-foreground/60">
+            {account.username}
+          </span>
+        </span>
+        <ChevronUpIcon
+          className={`size-4 shrink-0 text-sidebar-foreground/60 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
     </div>
   );
 }

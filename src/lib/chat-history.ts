@@ -20,7 +20,27 @@ type ThreadDocument = {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  pinned?: boolean;
+  pinnedOrder?: number;
+  projectId?: string;
+  titleCustom?: boolean;
   messages: StoredMessage[];
+};
+
+type ProjectDocument = {
+  id: string;
+  userId: string;
+  type: "project";
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectSummary = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ThreadHistoryItem = {
@@ -28,6 +48,10 @@ export type ThreadHistoryItem = {
   title: string;
   updatedAt: string;
   preview: string;
+  pinned: boolean;
+  pinnedOrder?: number;
+  projectId?: string;
+  projectName?: string;
 };
 
 type SessionDocument = {
@@ -230,7 +254,8 @@ export async function persistChatThread(args: {
   const { threads } = resources;
   const storedMessages = toStoredMessages(args.messages, args.assistantText);
   const existing = await threads.item(args.threadId, args.userId).read<ThreadDocument>().catch(() => undefined);
-  const createdAt = existing?.resource?.createdAt ?? new Date().toISOString();
+  const prev = existing?.resource;
+  const createdAt = prev?.createdAt ?? new Date().toISOString();
   const updatedAt = new Date().toISOString();
 
   const document: ThreadDocument = {
@@ -238,15 +263,101 @@ export async function persistChatThread(args: {
     userId: args.userId,
     type: "thread",
     locale: args.locale,
-    title: getThreadTitle(storedMessages),
+    // A user-renamed title sticks; otherwise it tracks the first message.
+    title: prev?.titleCustom ? prev.title : getThreadTitle(storedMessages),
     preview: getThreadPreview(storedMessages),
     createdAt,
     updatedAt,
     messageCount: storedMessages.length,
+    // Persist overwrites the whole doc, so carry forward pin/order/project/rename state.
+    pinned: prev?.pinned ?? false,
+    pinnedOrder: prev?.pinnedOrder,
+    projectId: prev?.projectId,
+    titleCustom: prev?.titleCustom ?? false,
     messages: storedMessages,
   };
 
   await threads.items.upsert(document);
+}
+
+// Read a thread doc, apply a change, upsert it. Returns false if the thread is missing.
+async function patchThread(
+  userId: string,
+  threadId: string,
+  apply: (doc: ThreadDocument) => ThreadDocument,
+) {
+  const resources = await ensureContainers();
+  if (!resources) {
+    return false;
+  }
+
+  const existing = await resources.threads
+    .item(threadId, userId)
+    .read<ThreadDocument>()
+    .catch(() => undefined);
+
+  if (!existing?.resource) {
+    return false;
+  }
+
+  await resources.threads.items.upsert(apply(existing.resource));
+  return true;
+}
+
+export async function setThreadPinned(args: {
+  userId: string;
+  threadId: string;
+  pinned: boolean;
+}) {
+  // Newly pinned chats float to the top of the Pinned group (smallest order, sorted asc).
+  return patchThread(args.userId, args.threadId, (doc) => ({
+    ...doc,
+    pinned: args.pinned,
+    pinnedOrder: args.pinned ? -Date.now() : undefined,
+  }));
+}
+
+export async function renameThread(args: {
+  userId: string;
+  threadId: string;
+  title: string;
+}) {
+  const title = args.title.trim();
+  if (!title) {
+    return false;
+  }
+  return patchThread(args.userId, args.threadId, (doc) => ({
+    ...doc,
+    title: title.slice(0, 120),
+    titleCustom: true,
+  }));
+}
+
+export async function setThreadProject(args: {
+  userId: string;
+  threadId: string;
+  projectId: string | null;
+}) {
+  return patchThread(args.userId, args.threadId, (doc) => {
+    const next = { ...doc };
+    if (args.projectId) {
+      next.projectId = args.projectId;
+    } else {
+      delete next.projectId;
+    }
+    return next;
+  });
+}
+
+export async function setThreadOrder(args: {
+  userId: string;
+  threadId: string;
+  pinnedOrder: number;
+}) {
+  return patchThread(args.userId, args.threadId, (doc) => ({
+    ...doc,
+    pinnedOrder: args.pinnedOrder,
+  }));
 }
 
 export async function logSessionEvent(args: {
@@ -310,29 +421,56 @@ export async function listThreadHistory(args: {
   userId: string;
   locale: AppLocale;
 }) {
-  const threads = await queryThreadDocumentsForUser(args.userId);
+  const [threads, projects] = await Promise.all([
+    queryThreadDocumentsForUser(args.userId),
+    listProjects(args.userId),
+  ]);
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
   const sortedThreads = [...threads].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
 
-  const grouped = new Map<string, HistoryGroup["items"]>();
+  const pinnedItems: ThreadHistoryItem[] = [];
+  const grouped = new Map<string, ThreadHistoryItem[]>();
 
   for (const thread of sortedThreads) {
-    const label = getLocalizedBucket(new Date(thread.updatedAt), args.locale);
-    const items = grouped.get(label) ?? [];
-    items.push({
+    const item: ThreadHistoryItem = {
       id: thread.id,
       title: thread.title,
       updatedAt: thread.updatedAt,
       preview: thread.preview,
-    });
+      pinned: thread.pinned ?? false,
+      pinnedOrder: thread.pinnedOrder,
+      projectId: thread.projectId,
+      projectName: thread.projectId
+        ? projectNameById.get(thread.projectId)
+        : undefined,
+    };
+
+    // Pinned chats float to a dedicated group at the top, regardless of age.
+    if (thread.pinned) {
+      pinnedItems.push(item);
+      continue;
+    }
+
+    const label = getLocalizedBucket(new Date(thread.updatedAt), args.locale);
+    const items = grouped.get(label) ?? [];
+    items.push(item);
     grouped.set(label, items);
   }
 
-  return Array.from(grouped.entries()).map(([label, items]) => ({
+  // Manual pin order (asc); newly pinned chats use a small (negative) order to sit on top.
+  pinnedItems.sort((a, b) => (a.pinnedOrder ?? 0) - (b.pinnedOrder ?? 0));
+
+  const dateGroups = Array.from(grouped.entries()).map(([label, items]) => ({
     label,
     items,
   }));
+
+  const pinnedLabel = args.locale === "ar" ? "المثبتة" : "Pinned";
+  return pinnedItems.length > 0
+    ? [{ label: pinnedLabel, items: pinnedItems }, ...dateGroups]
+    : dateGroups;
 }
 
 export async function getThreadById(args: {
@@ -365,5 +503,119 @@ export async function deleteThreadById(args: {
   }
 
   await resources.threads.item(args.threadId, args.userId).delete();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Projects (stored as type:"project" docs in the same per-user threads container)
+// ---------------------------------------------------------------------------
+
+const toProjectSummary = (doc: ProjectDocument): ProjectSummary => ({
+  id: doc.id,
+  name: doc.name,
+  createdAt: doc.createdAt,
+  updatedAt: doc.updatedAt,
+});
+
+export async function listProjects(userId: string): Promise<ProjectSummary[]> {
+  const resources = await ensureContainers();
+  if (!resources) {
+    return [];
+  }
+
+  const result = await resources.threads.items
+    .query<ProjectDocument>(
+      {
+        query: "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'project'",
+        parameters: [{ name: "@userId", value: userId }],
+      },
+      { partitionKey: userId },
+    )
+    .fetchAll();
+
+  return result.resources
+    .map(toProjectSummary)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function createProject(userId: string, name: string) {
+  const resources = await ensureContainers();
+  if (!resources) {
+    return undefined;
+  }
+
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const now = new Date().toISOString();
+  const doc: ProjectDocument = {
+    id: crypto.randomUUID(),
+    userId,
+    type: "project",
+    name: trimmed.slice(0, 80),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await resources.threads.items.upsert(doc);
+  return toProjectSummary(doc);
+}
+
+export async function renameProject(userId: string, projectId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const resources = await ensureContainers();
+  if (!resources) {
+    return false;
+  }
+
+  const existing = await resources.threads
+    .item(projectId, userId)
+    .read<ProjectDocument>()
+    .catch(() => undefined);
+
+  if (!existing?.resource || existing.resource.type !== "project") {
+    return false;
+  }
+
+  await resources.threads.items.upsert({
+    ...existing.resource,
+    name: trimmed.slice(0, 80),
+    updatedAt: new Date().toISOString(),
+  });
+  return true;
+}
+
+export async function deleteProject(userId: string, projectId: string) {
+  const resources = await ensureContainers();
+  if (!resources) {
+    return false;
+  }
+
+  const existing = await resources.threads
+    .item(projectId, userId)
+    .read<ProjectDocument>()
+    .catch(() => undefined);
+
+  if (!existing?.resource || existing.resource.type !== "project") {
+    return false;
+  }
+
+  // Detach member chats from the project before removing it.
+  const members = await queryThreadDocumentsForUser(userId);
+  for (const thread of members) {
+    if (thread.projectId === projectId) {
+      const next = { ...thread };
+      delete next.projectId;
+      await resources.threads.items.upsert(next);
+    }
+  }
+
+  await resources.threads.item(projectId, userId).delete();
   return true;
 }

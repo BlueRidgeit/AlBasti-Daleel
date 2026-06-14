@@ -378,3 +378,121 @@ export async function readIndexedDocument(
     ],
   };
 }
+
+// ---------------------------------------------------------------------------
+// Advanced "Query Builder" search (deterministic keyword matching, no AI).
+// Mirrors the lawyers' legacy desktop tool: ALL / ANY / EXACT / WITHOUT / PART.
+// ---------------------------------------------------------------------------
+
+export type AdvancedSearchInput = {
+  allWords?: string;
+  anyWords?: string;
+  exactPhrase?: string;
+  withoutWords?: string;
+  partWords?: string;
+  libraries?: string[];
+  top?: number;
+};
+
+// Escape Lucene query-syntax metacharacters in a user-supplied term.
+const escapeLuceneTerm = (term: string) =>
+  term.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, "\\$1");
+
+const tokenizeWords = (value?: string) =>
+  (value ?? "")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+// Build a single Azure AI Search full-Lucene query from the five criteria.
+function buildLuceneQuery(input: AdvancedSearchInput): string {
+  const clauses: string[] = [];
+
+  // ALL of the words -> every token required.
+  for (const token of tokenizeWords(input.allWords)) {
+    clauses.push(`+${escapeLuceneTerm(token)}`);
+  }
+
+  // ANY of the words -> at least one of the group required.
+  const anyTokens = tokenizeWords(input.anyWords).map(escapeLuceneTerm);
+  if (anyTokens.length === 1) {
+    clauses.push(`+${anyTokens[0]}`);
+  } else if (anyTokens.length > 1) {
+    clauses.push(`+(${anyTokens.join(" OR ")})`);
+  }
+
+  // EXACT PHRASE -> required quoted phrase.
+  const phrase = (input.exactPhrase ?? "").trim();
+  if (phrase) {
+    clauses.push(`+"${phrase.replace(/(["\\])/g, "\\$1")}"`);
+  }
+
+  // PART of the words -> required prefix match (token*).
+  for (const token of tokenizeWords(input.partWords)) {
+    clauses.push(`+${escapeLuceneTerm(token)}*`);
+  }
+
+  // WITHOUT the words -> prohibited.
+  for (const token of tokenizeWords(input.withoutWords)) {
+    clauses.push(`-${escapeLuceneTerm(token)}`);
+  }
+
+  return clauses.join(" ");
+}
+
+export async function searchDocumentsAdvanced(
+  input: AdvancedSearchInput,
+): Promise<SearchDocumentsResult> {
+  if (!hasAzureSearchConfig) {
+    return { configured: false, query: "", totalMatches: 0, documents: [] };
+  }
+
+  const query = buildLuceneQuery(input);
+  if (!query.trim()) {
+    return { configured: true, query: "", totalMatches: 0, documents: [] };
+  }
+
+  const top = Math.min(Math.max(input.top ?? 30, 1), 50);
+  const libraryFilter = buildLibraryFilter(input.libraries);
+
+  const response = await runAzureSearch({
+    search: query,
+    queryType: "full",
+    searchFields: "content,contentAr,title",
+    top,
+    select: "id,title,url,lastModified,content,library,driveId,itemId",
+    ...(libraryFilter ? { filter: libraryFilter } : {}),
+  });
+
+  const deduped = new Map<string, SearchDocumentMatch>();
+  for (const hit of response.value ?? []) {
+    const itemId = resolveCanonicalItemId(hit);
+    if (!hit.id || !itemId) {
+      continue;
+    }
+
+    const score = hit["@search.score"] ?? 0;
+    const existing = deduped.get(itemId);
+    if (existing && existing.score >= score) {
+      continue;
+    }
+
+    deduped.set(itemId, {
+      itemId,
+      chunkId: hit.id,
+      title: resolveDisplayTitle(hit),
+      library: hit.library?.trim() || undefined,
+      driveId: hit.driveId?.trim() || undefined,
+      url: hit.url,
+      lastModified: hit.lastModified,
+      snippet: getSnippet(hit),
+      score,
+    });
+  }
+
+  const documents = [...deduped.values()]
+    .sort((left, right) => right.score - left.score)
+    .slice(0, top);
+
+  return { configured: true, query, totalMatches: documents.length, documents };
+}
