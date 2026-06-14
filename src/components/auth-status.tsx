@@ -260,6 +260,7 @@ function AccountBarInner({
   const router = useRouter();
   const account = instance.getActiveAccount() ?? accounts[0];
   const [open, setOpen] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const ref = useRef<HTMLDivElement>(null);
 
   const initials = useMemo(() => {
@@ -272,6 +273,41 @@ function AccountBarInner({
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("");
   }, [account?.name, account?.username]);
+
+  // Load the signed-in user's Entra ID profile photo (Graph User.Read).
+  // Falls back to initials if there's no photo or User.Read isn't consented.
+  useEffect(() => {
+    if (!account) return;
+    let active = true;
+    let createdUrl: string | undefined;
+    (async () => {
+      try {
+        const result = await instance.acquireTokenSilent({
+          scopes: ["User.Read"],
+          account,
+        });
+        const response = await fetch(
+          "https://graph.microsoft.com/v1.0/me/photo/$value",
+          { headers: { Authorization: `Bearer ${result.accessToken}` } },
+        );
+        if (!response.ok) return;
+        const blob = await response.blob();
+        createdUrl = URL.createObjectURL(blob);
+        if (active) {
+          setPhotoUrl(createdUrl);
+        } else {
+          URL.revokeObjectURL(createdUrl);
+        }
+      } catch {
+        // No photo / no User.Read consent — keep the initials avatar.
+      }
+    })();
+    return () => {
+      active = false;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.homeAccountId]);
 
   useEffect(() => {
     if (!open) return;
@@ -363,9 +399,18 @@ function AccountBarInner({
           isArabic ? "flex-row-reverse text-right" : "text-left"
         }`}
       >
-        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-          {initials}
-        </span>
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photoUrl}
+            alt=""
+            className="size-9 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+            {initials}
+          </span>
+        )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-sidebar-foreground">
             {account.name ?? account.username}

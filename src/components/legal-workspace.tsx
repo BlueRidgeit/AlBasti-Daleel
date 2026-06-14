@@ -810,24 +810,27 @@ function PrimaryNav({
       }`}
     >
       <div className="border-b border-sidebar-border px-5 py-5">
-        <div className={`${isArabic ? "text-right" : "text-left"}`}>
-          <div className={`flex items-center gap-3 ${isArabic ? "flex-row-reverse justify-end" : ""}`}>
-            <Image
-              src="/daleel-logo.png"
-              alt="Daleel"
-              width={84}
-              height={84}
-              priority
-              className="h-16 w-16 object-contain"
-            />
-          </div>
-          <h1 className="mt-2 text-[1.7rem] font-semibold leading-tight tracking-tight text-sidebar-foreground">
+        <div className={`flex items-center gap-3 ${isArabic ? "flex-row-reverse" : ""}`}>
+          <h1 className="min-w-0 flex-1 text-[32px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
             {copy.title}
           </h1>
-          <p className="mt-1 text-sm font-medium leading-snug" style={{ color: "#f7941e" }}>
-            {copy.tagline}
-          </p>
+          <Image
+            src="/daleel-logo.png"
+            alt="Daleel"
+            width={110}
+            height={110}
+            priority
+            className="h-[84px] w-[84px] shrink-0 object-contain"
+          />
         </div>
+        <p
+          className={`mt-1 text-[12px] font-medium leading-snug ${
+            isArabic ? "text-left" : "text-right"
+          }`}
+          style={{ color: "#f7941e" }}
+        >
+          {copy.tagline}
+        </p>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 py-3">
@@ -1072,7 +1075,7 @@ function NavButton({
 }) {
   const className = `flex w-full items-center gap-3 rounded-2xl border px-4 py-2.5 transition ${
     primary
-      ? "border-sidebar-primary/50 bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+      ? "border-sidebar-primary/50 bg-sidebar-primary text-sidebar-foreground hover:bg-sidebar-primary/90"
       : "border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:border-sidebar-primary/30 hover:bg-sidebar-accent"
   } ${isArabic ? "flex-row-reverse text-right" : "text-left"}`;
 
