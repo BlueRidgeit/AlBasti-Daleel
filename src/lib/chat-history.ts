@@ -32,6 +32,7 @@ type ProjectDocument = {
   userId: string;
   type: "project";
   name: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -39,6 +40,7 @@ type ProjectDocument = {
 export type ProjectSummary = {
   id: string;
   name: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -245,6 +247,7 @@ export async function persistChatThread(args: {
   locale: AppLocale;
   messages: UIMessage[];
   assistantText?: string;
+  projectId?: string;
 }) {
   const resources = await ensureContainers();
   if (!resources) {
@@ -272,7 +275,8 @@ export async function persistChatThread(args: {
     // Persist overwrites the whole doc, so carry forward pin/order/project/rename state.
     pinned: prev?.pinned ?? false,
     pinnedOrder: prev?.pinnedOrder,
-    projectId: prev?.projectId,
+    // A project passed on the request (new chat started from a project) takes effect; otherwise preserved.
+    projectId: args.projectId ?? prev?.projectId,
     titleCustom: prev?.titleCustom ?? false,
     messages: storedMessages,
   };
@@ -513,6 +517,7 @@ export async function deleteThreadById(args: {
 const toProjectSummary = (doc: ProjectDocument): ProjectSummary => ({
   id: doc.id,
   name: doc.name,
+  description: doc.description,
   createdAt: doc.createdAt,
   updatedAt: doc.updatedAt,
 });
@@ -538,7 +543,11 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function createProject(userId: string, name: string) {
+export async function createProject(
+  userId: string,
+  name: string,
+  description?: string,
+) {
   const resources = await ensureContainers();
   if (!resources) {
     return undefined;
@@ -550,11 +559,13 @@ export async function createProject(userId: string, name: string) {
   }
 
   const now = new Date().toISOString();
+  const desc = description?.trim();
   const doc: ProjectDocument = {
     id: crypto.randomUUID(),
     userId,
     type: "project",
     name: trimmed.slice(0, 80),
+    description: desc ? desc.slice(0, 500) : undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -563,12 +574,11 @@ export async function createProject(userId: string, name: string) {
   return toProjectSummary(doc);
 }
 
-export async function renameProject(userId: string, projectId: string, name: string) {
-  const trimmed = name.trim();
-  if (!trimmed) {
-    return false;
-  }
-
+export async function updateProject(
+  userId: string,
+  projectId: string,
+  fields: { name?: string; description?: string },
+) {
   const resources = await ensureContainers();
   if (!resources) {
     return false;
@@ -583,11 +593,23 @@ export async function renameProject(userId: string, projectId: string, name: str
     return false;
   }
 
-  await resources.threads.items.upsert({
+  const next: ProjectDocument = {
     ...existing.resource,
-    name: trimmed.slice(0, 80),
     updatedAt: new Date().toISOString(),
-  });
+  };
+  if (fields.name?.trim()) {
+    next.name = fields.name.trim().slice(0, 80);
+  }
+  if (fields.description !== undefined) {
+    const desc = fields.description.trim();
+    if (desc) {
+      next.description = desc.slice(0, 500);
+    } else {
+      delete next.description;
+    }
+  }
+
+  await resources.threads.items.upsert(next);
   return true;
 }
 

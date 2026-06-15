@@ -54,6 +54,9 @@ export async function POST(req: Request) {
         (value): value is string => typeof value === "string",
       )
     : undefined;
+  // A new chat started from a project carries its projectId so the persisted thread is tagged.
+  const projectId =
+    typeof payload?.projectId === "string" ? payload.projectId : undefined;
   const threadId = id ?? crypto.randomUUID();
   const uploadedDocuments = collectUploadedDocuments(messages);
   const modelMessages = sanitizeMessagesForModel(messages, uploadedDocuments);
@@ -103,6 +106,7 @@ export async function POST(req: Request) {
       threadId,
       locale,
       messages,
+      projectId,
     }).catch((error) => {
       console.error("Failed to persist initial thread snapshot", error);
     });
@@ -251,6 +255,7 @@ export async function POST(req: Request) {
         locale,
         messages,
         assistantText: event.text,
+        projectId,
       }).catch((error) => {
         console.error("Failed to persist completed thread snapshot", error);
       });

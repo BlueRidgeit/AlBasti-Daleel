@@ -8,12 +8,20 @@ import {
   FileTextIcon,
   FolderIcon,
   FolderPlusIcon,
+  MoreVerticalIcon,
+  PencilIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
 
 import { ChatMenu } from "@/components/chat-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { appCopy, type AppLocale } from "@/lib/i18n";
 
 export type ChatEntry = {
@@ -27,7 +35,7 @@ export type ChatEntry = {
   projectName?: string;
 };
 
-export type ProjectEntry = { id: string; name: string };
+export type ProjectEntry = { id: string; name: string; description?: string };
 
 export type SearchDoc = {
   itemId: string;
@@ -296,6 +304,100 @@ export function AllChatsView({
   );
 }
 
+function ProjectModal({
+  locale,
+  isArabic,
+  open,
+  initial,
+  onOpenChange,
+  onSubmit,
+}: {
+  locale: AppLocale;
+  isArabic: boolean;
+  open: boolean;
+  initial: { name: string; description?: string } | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (name: string, description: string) => void;
+}) {
+  const copy = appCopy[locale];
+  const editing = Boolean(initial);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setName(initial?.name ?? "");
+      setDescription(initial?.description ?? "");
+    }
+  }, [open, initial]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg" dir={isArabic ? "rtl" : "ltr"}>
+        <DialogHeader className={isArabic ? "text-right" : "text-left"}>
+          <DialogTitle>
+            {editing ? copy.projectModalEditTitle : copy.projectModalCreateTitle}
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (name.trim()) onSubmit(name.trim(), description.trim());
+          }}
+          className="space-y-4"
+        >
+          <div className={isArabic ? "text-right" : "text-left"}>
+            <label className="mb-1.5 block text-sm font-medium text-slate-800">
+              {copy.projectWorkingOn}
+            </label>
+            <input
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={copy.projectNamePlaceholder}
+              dir={isArabic ? "rtl" : "ltr"}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-primary/40 focus:outline-none"
+            />
+          </div>
+          <div className={isArabic ? "text-right" : "text-left"}>
+            <label className="mb-1.5 block text-sm font-medium text-slate-800">
+              {copy.projectAchieve}
+            </label>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={copy.projectDescPlaceholder}
+              dir={isArabic ? "rtl" : "ltr"}
+              rows={4}
+              className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-primary/40 focus:outline-none"
+            />
+          </div>
+          <div
+            className={`flex items-center justify-end gap-2 ${
+              isArabic ? "flex-row-reverse" : ""
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              {copy.cancel}
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim()}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {editing ? copy.saveLabel : copy.projectCreateBtn}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProjectsView({
   locale,
   isArabic,
@@ -307,7 +409,9 @@ export function ProjectsView({
   actions,
   onRenameSubmit,
   onCreateProject,
+  onUpdateProject,
   onDeleteProject,
+  onStartProjectChat,
 }: {
   locale: AppLocale;
   isArabic: boolean;
@@ -318,14 +422,46 @@ export function ProjectsView({
   renamingId: string | null;
   actions: ChatActions;
   onRenameSubmit: (id: string, title: string | null) => void;
-  onCreateProject: (name: string) => void;
+  onCreateProject: (name: string, description: string) => Promise<ProjectEntry | undefined>;
+  onUpdateProject: (id: string, name: string, description: string) => void;
   onDeleteProject: (id: string) => void;
+  onStartProjectChat: (projectId: string) => void;
 }) {
   const copy = appCopy[locale];
-  const [name, setName] = useState("");
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ProjectEntry | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<ProjectEntry | null>(null);
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
 
   const Back = isArabic ? ArrowRightIcon : ArrowLeftIcon;
+
+  const handleModalSubmit = async (name: string, description: string) => {
+    if (editing) {
+      onUpdateProject(editing.id, name, description);
+      setSelected((current) =>
+        current && current.id === editing.id
+          ? { ...current, name, description: description || undefined }
+          : current,
+      );
+      setModalOpen(false);
+      return;
+    }
+    const created = await onCreateProject(name, description);
+    setModalOpen(false);
+    if (created) setSelected(created);
+  };
+
+  const projectModal = (
+    <ProjectModal
+      locale={locale}
+      isArabic={isArabic}
+      open={modalOpen}
+      initial={editing ? { name: editing.name, description: editing.description } : null}
+      onOpenChange={setModalOpen}
+      onSubmit={handleModalSubmit}
+    />
+  );
 
   if (selected) {
     const projectChats = chats.filter((chat) => chat.projectId === selected.id);
@@ -334,23 +470,112 @@ export function ProjectsView({
         dir={isArabic ? "rtl" : "ltr"}
         className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-8"
       >
-        <div className={`${viewHeaderCls} ${isArabic ? "flex-row-reverse" : ""}`}>
-          <button
-            type="button"
-            onClick={() => setSelected(null)}
-            className="inline-flex size-9 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-slate-100"
-            aria-label={copy.backLabel}
-          >
-            <Back className="size-4" />
-          </button>
-          <h2 className="flex-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
-            {selected.name}
-          </h2>
+        <button
+          type="button"
+          onClick={() => setSelected(null)}
+          className={`mb-6 flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-slate-800 ${
+            isArabic ? "flex-row-reverse" : ""
+          }`}
+        >
+          <Back className="size-4" />
+          {copy.allProjects}
+        </button>
+
+        <div className={`mb-6 flex items-start gap-3 ${isArabic ? "flex-row-reverse" : ""}`}>
+          <div className="min-w-0 flex-1">
+            <h2
+              className={`truncate text-2xl font-semibold tracking-tight text-slate-950 ${
+                isArabic ? "text-right" : "text-left"
+              }`}
+            >
+              {selected.name}
+            </h2>
+            {selected.description ? (
+              <p
+                className={`mt-1 text-sm text-slate-600 ${
+                  isArabic ? "text-right" : "text-left"
+                }`}
+              >
+                {selected.description}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setDetailMenuOpen((value) => !value)}
+              aria-label="More options"
+              className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100"
+            >
+              <MoreVerticalIcon className="size-4" />
+            </button>
+            {detailMenuOpen ? (
+              <>
+                <button
+                  type="button"
+                  aria-hidden
+                  tabIndex={-1}
+                  onClick={() => setDetailMenuOpen(false)}
+                  className="fixed inset-0 z-40 cursor-default"
+                />
+                <div
+                  className={`absolute z-50 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl ${
+                    isArabic ? "left-0" : "right-0"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDetailMenuOpen(false);
+                      setEditing(selected);
+                      setModalOpen(true);
+                    }}
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 ${
+                      isArabic ? "flex-row-reverse text-right" : "text-left"
+                    }`}
+                  >
+                    <PencilIcon className="size-4" />
+                    <span className="flex-1">{copy.menuEditDetails}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDetailMenuOpen(false);
+                      if (window.confirm(copy.projectDeleteConfirm)) {
+                        onDeleteProject(selected.id);
+                        setSelected(null);
+                      }
+                    }}
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 ${
+                      isArabic ? "flex-row-reverse text-right" : "text-left"
+                    }`}
+                  >
+                    <Trash2Icon className="size-4" />
+                    <span className="flex-1">{copy.projectDelete}</span>
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
 
+        <button
+          type="button"
+          onClick={() => onStartProjectChat(selected.id)}
+          className={`mb-6 w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 transition hover:border-primary/40 hover:shadow-sm ${
+            isArabic ? "text-right" : "text-left"
+          }`}
+        >
+          <span className="block text-sm text-slate-400">
+            {copy.projectComposerPlaceholder}
+          </span>
+          <PlusIcon className="mt-3 size-5 text-slate-400" />
+        </button>
+
         {projectChats.length === 0 ? (
-          <p className="py-12 text-center text-sm text-slate-500">
-            {copy.projectChatsEmpty}
+          <p className="py-10 text-center text-sm text-slate-500">
+            {copy.projectStartHint}
           </p>
         ) : (
           <div>
@@ -373,9 +598,17 @@ export function ProjectsView({
             ))}
           </div>
         )}
+
+        {projectModal}
       </div>
     );
   }
+
+  const filtered = query.trim()
+    ? projects.filter((project) =>
+        project.name.toLowerCase().includes(query.trim().toLowerCase()),
+      )
+    : projects;
 
   return (
     <div
@@ -386,88 +619,73 @@ export function ProjectsView({
         <h2 className="flex-1 text-2xl font-semibold tracking-tight text-slate-950">
           {copy.projectsTitle}
         </h2>
-      </div>
-
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (name.trim()) {
-            onCreateProject(name.trim());
-            setName("");
-          }
-        }}
-        className={`mb-6 flex items-center gap-2 ${isArabic ? "flex-row-reverse" : ""}`}
-      >
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={copy.projectNamePlaceholder}
-          dir={isArabic ? "rtl" : "ltr"}
-          className={`min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 transition focus:border-primary/40 focus:outline-none ${
-            isArabic ? "text-right" : "text-left"
-          }`}
-        />
         <button
-          type="submit"
-          disabled={!name.trim()}
-          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+          type="button"
+          onClick={() => {
+            setEditing(null);
+            setModalOpen(true);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
         >
           <FolderPlusIcon className="size-4" />
-          {copy.projectsCreate}
+          {copy.projectsNew}
         </button>
-      </form>
+      </div>
 
-      {projects.length === 0 ? (
+      {projects.length > 0 ? (
+        <div className="relative mb-4">
+          <SearchIcon
+            className={`pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-slate-400 ${
+              isArabic ? "right-3" : "left-3"
+            }`}
+          />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={copy.projectSearchPlaceholder}
+            dir={isArabic ? "rtl" : "ltr"}
+            className={`w-full rounded-xl border border-slate-200 bg-white py-2.5 text-sm text-slate-900 transition focus:border-primary/40 focus:outline-none ${
+              isArabic ? "pr-10 pl-3 text-right" : "pl-10 pr-3 text-left"
+            }`}
+          />
+        </div>
+      ) : null}
+
+      {filtered.length === 0 ? (
         <p className="py-12 text-center text-sm text-slate-500">{copy.projectsEmpty}</p>
       ) : (
         <div className="grid gap-2.5">
-          {projects.map((project) => {
+          {filtered.map((project) => {
             const count = chats.filter((chat) => chat.projectId === project.id).length;
             return (
-              <div
+              <button
                 key={project.id}
-                className={`group/item flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-primary/30 ${
-                  isArabic ? "flex-row-reverse" : ""
+                type="button"
+                onClick={() => setSelected(project)}
+                className={`flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-primary/30 ${
+                  isArabic ? "flex-row-reverse text-right" : "text-left"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => setSelected(project)}
-                  className={`flex min-w-0 flex-1 items-center gap-3 ${
-                    isArabic ? "flex-row-reverse text-right" : "text-left"
-                  }`}
-                >
-                  <span className="inline-flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <FolderIcon className="size-4" />
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <FolderIcon className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-slate-900">
+                    {project.name}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-slate-900">
-                      {project.name}
-                    </span>
-                    <span className="block text-xs text-slate-500">
-                      {count} {copy.chatsTitle}
-                    </span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {project.description
+                      ? project.description
+                      : `${count} ${copy.chatsTitle}`}
                   </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(copy.projectDeleteConfirm)) {
-                      onDeleteProject(project.id);
-                      setSelected(null);
-                    }
-                  }}
-                  aria-label={copy.projectDelete}
-                  title={copy.projectDelete}
-                  className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover/item:opacity-100"
-                >
-                  <Trash2Icon className="size-4" />
-                </button>
-              </div>
+                </span>
+              </button>
             );
           })}
         </div>
       )}
+
+      {projectModal}
     </div>
   );
 }

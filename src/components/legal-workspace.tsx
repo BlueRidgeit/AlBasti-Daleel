@@ -172,6 +172,9 @@ export function LegalWorkspace({
   const [view, setView] = useState<View>("chat");
   const [searchDocs, setSearchDocs] = useState<SearchDoc[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
+  // When a new chat is started from a project, its id rides along on /api/chat so the
+  // persisted thread is tagged to that project.
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocale(getInitialLocale(initialLocale));
@@ -296,7 +299,6 @@ export function LegalWorkspace({
       cancelled = true;
       window.clearInterval(interval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locale, localeHydrated]);
 
   const copy = appCopy[locale];
@@ -333,6 +335,7 @@ export function LegalWorkspace({
 
   const handleOpenThread = async (threadId: string) => {
     setView("chat");
+    setPendingProjectId(null);
     setLoadingThreadId(threadId);
     try {
       const accessToken = await getApiAccessToken();
@@ -368,6 +371,7 @@ export function LegalWorkspace({
     setView("chat");
     setActiveThread(null);
     setActiveThreadVersion((current) => current + 1);
+    setPendingProjectId(null);
   };
 
   // ---- shared PATCH helper ----
@@ -385,7 +389,10 @@ export function LegalWorkspace({
     return Boolean(response?.ok);
   };
 
-  const createProjectApi = async (name: string): Promise<ProjectEntry | undefined> => {
+  const createProjectApi = async (
+    name: string,
+    description?: string,
+  ): Promise<ProjectEntry | undefined> => {
     const accessToken = await getApiAccessToken().catch(() => undefined);
     if (!accessToken) return undefined;
     const response = await fetch("/api/projects", {
@@ -394,7 +401,7 @@ export function LegalWorkspace({
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, description }),
     }).catch(() => undefined);
     if (!response?.ok) return undefined;
     const data = (await response.json()) as { project?: ProjectEntry };
@@ -452,9 +459,37 @@ export function LegalWorkspace({
     await loadHistory(locale);
   };
 
-  const handleCreateProject = async (name: string) => {
-    await createProjectApi(name);
+  const handleCreateProject = async (name: string, description: string) => {
+    const project = await createProjectApi(name, description);
     await loadProjects();
+    return project;
+  };
+
+  const handleUpdateProject = async (
+    id: string,
+    name: string,
+    description: string,
+  ) => {
+    const accessToken = await getApiAccessToken().catch(() => undefined);
+    if (!accessToken) return;
+    await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ name, description }),
+    }).catch(() => undefined);
+    await loadProjects();
+    await loadHistory(locale);
+  };
+
+  // Start a brand-new chat already scoped to a project (composer on the project page).
+  const handleStartProjectChat = (projectId: string) => {
+    setPendingProjectId(projectId);
+    setActiveThread(null);
+    setActiveThreadVersion((current) => current + 1);
+    setView("chat");
   };
 
   const handleDeleteProject = async (id: string) => {
@@ -539,7 +574,9 @@ export function LegalWorkspace({
         actions={actions}
         onRenameSubmit={handleRenameSubmit}
         onCreateProject={handleCreateProject}
+        onUpdateProject={handleUpdateProject}
         onDeleteProject={handleDeleteProject}
+        onStartProjectChat={handleStartProjectChat}
       />
     ) : view === "search-results" ? (
       <SearchResultsView
@@ -607,6 +644,7 @@ export function LegalWorkspace({
       initialMessages={activeThread?.messages ?? []}
       onThreadActivity={handleThreadActivity}
       selectedLibraries={selectedLibraries}
+      pendingProjectId={pendingProjectId}
     >
       <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(38,53,139,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(205,170,72,0.18),_transparent_24%),linear-gradient(180deg,_#f6f4f0_0%,_#ece7de_100%)] px-3 py-3 text-slate-900 md:px-4 md:py-4">
         <div
@@ -637,12 +675,14 @@ function ChatRuntimeShell({
   initialMessages,
   onThreadActivity,
   selectedLibraries,
+  pendingProjectId,
   children,
 }: {
   activeThreadId?: string;
   initialMessages: UIMessage[];
   onThreadActivity: (payload: { threadId: string; messages: UIMessage[] }) => void;
   selectedLibraries: string[];
+  pendingProjectId: string | null;
   children: ReactNode;
 }) {
   const runtime = useChatRuntime({
@@ -664,6 +704,7 @@ function ChatRuntimeShell({
             id: resolvedThreadId,
             messages: options.messages,
             selectedLibraries,
+            ...(pendingProjectId ? { projectId: pendingProjectId } : {}),
             requestMetadata: options.requestMetadata,
           },
           credentials: options.credentials,

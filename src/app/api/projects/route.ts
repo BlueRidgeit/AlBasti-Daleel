@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => undefined)) as
-    | { name?: string }
+    | { name?: string; description?: string }
     | undefined;
   const name = body?.name?.trim();
 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const project = await createProject(user.objectId, name);
+    const project = await createProject(user.objectId, name, body?.description);
     if (!project) {
       return Response.json({ error: "Could not create project." }, { status: 500 });
     }

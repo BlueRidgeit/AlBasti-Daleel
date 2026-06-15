@@ -1,5 +1,5 @@
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-server";
-import { deleteProject, renameProject } from "@/lib/chat-history";
+import { deleteProject, updateProject } from "@/lib/chat-history";
 
 export const runtime = "nodejs";
 
@@ -17,24 +17,29 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   const body = (await request.json().catch(() => undefined)) as
-    | { name?: string }
+    | { name?: string; description?: string }
     | undefined;
-  const name = body?.name?.trim();
 
-  if (!name) {
-    return Response.json({ error: "name is required." }, { status: 400 });
+  if (!body?.name?.trim() && body?.description === undefined) {
+    return Response.json(
+      { error: "name or description is required." },
+      { status: 400 },
+    );
   }
 
   try {
     const { id } = await params;
-    const ok = await renameProject(user.objectId, id, name);
+    const ok = await updateProject(user.objectId, id, {
+      name: body.name,
+      description: body.description,
+    });
     if (!ok) {
       return Response.json({ error: "Project not found." }, { status: 404 });
     }
     return Response.json({ ok: true });
   } catch (error) {
-    console.error("Failed to rename project", error);
-    return Response.json({ error: "Could not rename project." }, { status: 500 });
+    console.error("Failed to update project", error);
+    return Response.json({ error: "Could not update project." }, { status: 500 });
   }
 }
 
