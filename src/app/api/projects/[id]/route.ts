@@ -52,7 +52,9 @@ export async function DELETE(request: Request, { params }: Params) {
 
   try {
     const { id } = await params;
-    const ok = await deleteProject(user.objectId, id);
+    const deleteChats =
+      new URL(request.url).searchParams.get("deleteChats") === "true";
+    const ok = await deleteProject(user.objectId, id, deleteChats);
     if (!ok) {
       return Response.json({ error: "Project not found." }, { status: 404 });
     }

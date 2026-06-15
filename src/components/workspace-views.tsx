@@ -424,7 +424,7 @@ export function ProjectsView({
   onRenameSubmit: (id: string, title: string | null) => void;
   onCreateProject: (name: string, description: string) => Promise<ProjectEntry | undefined>;
   onUpdateProject: (id: string, name: string, description: string) => void;
-  onDeleteProject: (id: string) => void;
+  onDeleteProject: (id: string, deleteChats: boolean) => void;
   onStartProjectChat: (projectId: string) => void;
 }) {
   const copy = appCopy[locale];
@@ -433,6 +433,8 @@ export function ProjectsView({
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectEntry | null>(null);
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectEntry | null>(null);
+  const [alsoDeleteChats, setAlsoDeleteChats] = useState(false);
 
   const Back = isArabic ? ArrowRightIcon : ArrowLeftIcon;
 
@@ -461,6 +463,68 @@ export function ProjectsView({
       onOpenChange={setModalOpen}
       onSubmit={handleModalSubmit}
     />
+  );
+
+  const deleteTargetChats = deleteTarget
+    ? chats.filter((chat) => chat.projectId === deleteTarget.id).length
+    : 0;
+
+  const deleteModal = (
+    <Dialog
+      open={Boolean(deleteTarget)}
+      onOpenChange={(value) => {
+        if (!value) setDeleteTarget(null);
+      }}
+    >
+      <DialogContent className="sm:max-w-md" dir={isArabic ? "rtl" : "ltr"}>
+        <DialogHeader className={isArabic ? "text-right" : "text-left"}>
+          <DialogTitle>{copy.projectDelete}</DialogTitle>
+        </DialogHeader>
+        <div className={`space-y-4 ${isArabic ? "text-right" : "text-left"}`}>
+          <p className="text-sm text-slate-600">
+            {copy.projectDeleteBody}
+            {deleteTarget ? ` “${deleteTarget.name}”` : ""}
+          </p>
+          {deleteTargetChats > 0 ? (
+            <label
+              className={`flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700 ${
+                isArabic ? "flex-row-reverse text-right" : "text-left"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={alsoDeleteChats}
+                onChange={(event) => setAlsoDeleteChats(event.target.checked)}
+                className="size-4 shrink-0 accent-primary"
+              />
+              <span className="flex-1">
+                {copy.projectDeleteChatsOption} ({deleteTargetChats})
+              </span>
+            </label>
+          ) : null}
+          <div className={`flex items-center justify-end gap-2 ${isArabic ? "flex-row-reverse" : ""}`}>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              {copy.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (deleteTarget) onDeleteProject(deleteTarget.id, alsoDeleteChats);
+                setDeleteTarget(null);
+                setSelected(null);
+              }}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+            >
+              {copy.historyDelete}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 
   if (selected) {
@@ -542,10 +606,8 @@ export function ProjectsView({
                     type="button"
                     onClick={() => {
                       setDetailMenuOpen(false);
-                      if (window.confirm(copy.projectDeleteConfirm)) {
-                        onDeleteProject(selected.id);
-                        setSelected(null);
-                      }
+                      setAlsoDeleteChats(false);
+                      setDeleteTarget(selected);
                     }}
                     className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 ${
                       isArabic ? "flex-row-reverse text-right" : "text-left"
@@ -600,6 +662,7 @@ export function ProjectsView({
         )}
 
         {projectModal}
+        {deleteModal}
       </div>
     );
   }
@@ -686,6 +749,7 @@ export function ProjectsView({
       )}
 
       {projectModal}
+      {deleteModal}
     </div>
   );
 }

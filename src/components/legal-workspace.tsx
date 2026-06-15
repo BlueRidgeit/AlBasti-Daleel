@@ -492,13 +492,16 @@ export function LegalWorkspace({
     setView("chat");
   };
 
-  const handleDeleteProject = async (id: string) => {
+  const handleDeleteProject = async (id: string, deleteChats: boolean) => {
     const accessToken = await getApiAccessToken().catch(() => undefined);
     if (!accessToken) return;
-    await fetch(`/api/projects/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }).catch(() => undefined);
+    await fetch(
+      `/api/projects/${encodeURIComponent(id)}?deleteChats=${deleteChats}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    ).catch(() => undefined);
     await loadProjects();
     await loadHistory(locale);
   };

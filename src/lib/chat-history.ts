@@ -613,7 +613,11 @@ export async function updateProject(
   return true;
 }
 
-export async function deleteProject(userId: string, projectId: string) {
+export async function deleteProject(
+  userId: string,
+  projectId: string,
+  deleteChats = false,
+) {
   const resources = await ensureContainers();
   if (!resources) {
     return false;
@@ -628,10 +632,15 @@ export async function deleteProject(userId: string, projectId: string) {
     return false;
   }
 
-  // Detach member chats from the project before removing it.
+  // Either delete the project's chats too, or just detach them (keep, unassigned).
   const members = await queryThreadDocumentsForUser(userId);
   for (const thread of members) {
-    if (thread.projectId === projectId) {
+    if (thread.projectId !== projectId) {
+      continue;
+    }
+    if (deleteChats) {
+      await resources.threads.item(thread.id, userId).delete().catch(() => {});
+    } else {
       const next = { ...thread };
       delete next.projectId;
       await resources.threads.items.upsert(next);
