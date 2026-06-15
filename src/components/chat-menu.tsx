@@ -63,7 +63,11 @@ export function ChatMenu({
   const [open, setOpen] = useState(false);
   const [projectPicker, setProjectPicker] = useState(false);
   const [newProject, setNewProject] = useState("");
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+  } | null>(null);
   const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -82,10 +86,19 @@ export function ChatMenu({
     }
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
-      const left = isArabic
-        ? Math.max(8, rect.left)
-        : Math.min(window.innerWidth - MENU_WIDTH - 8, rect.right - MENU_WIDTH);
-      setPos({ top: rect.bottom + 4, left });
+      const rawLeft = isArabic ? rect.left : rect.right - MENU_WIDTH;
+      const left = Math.min(
+        Math.max(8, rawLeft),
+        window.innerWidth - MENU_WIDTH - 8,
+      );
+      // Flip the menu above the trigger when there isn't enough room below
+      // (e.g. the last rows of a long list), so it never runs off the bottom.
+      const estimatedHeight = 320;
+      if (window.innerHeight - rect.bottom < estimatedHeight) {
+        setPos({ bottom: window.innerHeight - rect.top + 4, left });
+      } else {
+        setPos({ top: rect.bottom + 4, left });
+      }
     }
     setOpen(true);
   };
@@ -126,8 +139,14 @@ export function ChatMenu({
               <div
                 role="menu"
                 dir={isArabic ? "rtl" : "ltr"}
-                style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
-                className="fixed z-50 overflow-hidden rounded-xl border border-white/12 bg-sidebar p-1 text-sidebar-foreground shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
+                style={{
+                  top: pos.top,
+                  bottom: pos.bottom,
+                  left: pos.left,
+                  width: MENU_WIDTH,
+                  maxHeight: "calc(100vh - 16px)",
+                }}
+                className="fixed z-50 overflow-y-auto rounded-xl border border-white/12 bg-sidebar p-1 text-sidebar-foreground shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
               >
                 {!projectPicker ? (
                   <>
