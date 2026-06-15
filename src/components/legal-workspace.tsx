@@ -809,28 +809,15 @@ function PrimaryNav({
         isArabic ? "border-l border-sidebar-border" : "border-r border-sidebar-border"
       }`}
     >
-      <div className="border-b border-sidebar-border px-5 py-5">
-        <div className={`flex items-center gap-3 ${isArabic ? "flex-row-reverse" : ""}`}>
-          <h1 className="min-w-0 flex-1 text-[32px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
-            {copy.title}
-          </h1>
-          <Image
-            src="/daleel-logo.png"
-            alt="Daleel"
-            width={110}
-            height={110}
-            priority
-            className="h-[84px] w-[84px] shrink-0 object-contain"
-          />
-        </div>
-        <p
-          className={`mt-1 text-[12px] font-medium leading-snug ${
-            isArabic ? "text-left" : "text-right"
-          }`}
-          style={{ color: "#f7941e" }}
-        >
-          {copy.tagline}
-        </p>
+      <div className="border-b border-sidebar-border px-5 py-4">
+        <Image
+          src={isArabic ? "/daleel-logo-ar.png" : "/daleel-logo-en.png"}
+          alt="Daleel"
+          width={4000}
+          height={1835}
+          priority
+          className="h-auto w-full object-contain"
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 py-3">
