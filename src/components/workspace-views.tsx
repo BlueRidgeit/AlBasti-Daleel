@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -435,6 +436,25 @@ export function ProjectsView({
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProjectEntry | null>(null);
   const [alsoDeleteChats, setAlsoDeleteChats] = useState(false);
+  const detailMenuBtnRef = useRef<HTMLButtonElement>(null);
+  const [detailMenuPos, setDetailMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const toggleDetailMenu = () => {
+    if (detailMenuOpen) {
+      setDetailMenuOpen(false);
+      return;
+    }
+    const rect = detailMenuBtnRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = 200;
+      const rawLeft = isArabic ? rect.left : rect.right - width;
+      const left = Math.min(Math.max(8, rawLeft), window.innerWidth - width - 8);
+      setDetailMenuPos({ top: rect.bottom + 6, left });
+    }
+    setDetailMenuOpen(true);
+  };
 
   const Back = isArabic ? ArrowRightIcon : ArrowLeftIcon;
 
@@ -565,60 +585,70 @@ export function ProjectsView({
             ) : null}
           </div>
 
-          <div className="relative shrink-0">
+          <div className="shrink-0">
             <button
+              ref={detailMenuBtnRef}
               type="button"
-              onClick={() => setDetailMenuOpen((value) => !value)}
+              onClick={toggleDetailMenu}
               aria-label="More options"
               className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100"
             >
               <MoreVerticalIcon className="size-4" />
             </button>
-            {detailMenuOpen ? (
-              <>
-                <button
-                  type="button"
-                  aria-hidden
-                  tabIndex={-1}
-                  onClick={() => setDetailMenuOpen(false)}
-                  className="fixed inset-0 z-40 cursor-default"
-                />
-                <div
-                  className={`absolute z-50 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl ${
-                    isArabic ? "left-0" : "right-0"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDetailMenuOpen(false);
-                      setEditing(selected);
-                      setModalOpen(true);
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 ${
-                      isArabic ? "flex-row-reverse text-right" : "text-left"
-                    }`}
-                  >
-                    <PencilIcon className="size-4" />
-                    <span className="flex-1">{copy.menuEditDetails}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDetailMenuOpen(false);
-                      setAlsoDeleteChats(false);
-                      setDeleteTarget(selected);
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 ${
-                      isArabic ? "flex-row-reverse text-right" : "text-left"
-                    }`}
-                  >
-                    <Trash2Icon className="size-4" />
-                    <span className="flex-1">{copy.projectDelete}</span>
-                  </button>
-                </div>
-              </>
-            ) : null}
+            {mounted && detailMenuOpen && detailMenuPos
+              ? createPortal(
+                  <>
+                    <button
+                      type="button"
+                      aria-hidden
+                      tabIndex={-1}
+                      onClick={() => setDetailMenuOpen(false)}
+                      className="fixed inset-0 z-40 cursor-default"
+                    />
+                    <div
+                      role="menu"
+                      data-slot="project-detail-menu"
+                      dir={isArabic ? "rtl" : "ltr"}
+                      style={{
+                        top: detailMenuPos.top,
+                        left: detailMenuPos.left,
+                        width: 200,
+                      }}
+                      className="fixed z-50 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailMenuOpen(false);
+                          setEditing(selected);
+                          setModalOpen(true);
+                        }}
+                        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 ${
+                          isArabic ? "flex-row-reverse text-right" : "text-left"
+                        }`}
+                      >
+                        <PencilIcon className="size-4 shrink-0" />
+                        <span className="flex-1">{copy.menuEditDetails}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailMenuOpen(false);
+                          setAlsoDeleteChats(false);
+                          setDeleteTarget(selected);
+                        }}
+                        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 ${
+                          isArabic ? "flex-row-reverse text-right" : "text-left"
+                        }`}
+                      >
+                        <Trash2Icon className="size-4 shrink-0" />
+                        <span className="flex-1">{copy.projectDelete}</span>
+                      </button>
+                    </div>
+                  </>,
+                  document.body,
+                )
+              : null}
           </div>
         </div>
 
