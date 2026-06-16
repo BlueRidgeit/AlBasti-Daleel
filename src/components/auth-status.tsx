@@ -337,7 +337,7 @@ function AccountBarInner({
     });
   };
 
-  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#1a2547] transition hover:bg-black/10 ${
+  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition hover:bg-black/10 ${
     isArabic ? "flex-row-reverse text-right" : "text-left"
   }`;
 
@@ -358,7 +358,7 @@ function AccountBarInner({
           </button>
 
           <div
-            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-black/50 ${
+            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60 ${
               isArabic ? "text-right" : "text-left"
             }`}
           >
