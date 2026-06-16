@@ -565,7 +565,7 @@ export function ProjectsView({
           {copy.allProjects}
         </button>
 
-        <div className={`mb-6 flex items-start gap-3 ${isArabic ? "flex-row-reverse" : ""}`}>
+        <div className="mb-6 flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <h2
               className={`truncate text-2xl font-semibold tracking-tight text-slate-950 ${
