@@ -337,14 +337,14 @@ function AccountBarInner({
     });
   };
 
-  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/90 transition hover:bg-white/10 ${
+  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#1a2547] transition hover:bg-black/10 ${
     isArabic ? "flex-row-reverse text-right" : "text-left"
   }`;
 
   return (
     <div ref={ref} className="relative">
       {open ? (
-        <div className="absolute bottom-full mb-2 w-full overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar p-1 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]">
+        <div className="absolute bottom-full mb-2 w-full overflow-hidden rounded-2xl border border-black/10 bg-[#f7941e] p-1 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]">
           <button
             type="button"
             className={itemCls}
@@ -358,7 +358,7 @@ function AccountBarInner({
           </button>
 
           <div
-            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/45 ${
+            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-black/50 ${
               isArabic ? "text-right" : "text-left"
             }`}
           >
@@ -379,10 +379,10 @@ function AccountBarInner({
             </button>
           ))}
 
-          <div className="my-1 h-px bg-white/10" />
+          <div className="my-1 h-px bg-black/15" />
           <button
             type="button"
-            className={`${itemCls} text-red-300 hover:bg-red-500/15 hover:text-red-200`}
+            className={`${itemCls} text-red-800 hover:bg-black/10 hover:text-red-900`}
             onClick={handleSignOut}
           >
             <LogOutIcon className="size-4" />

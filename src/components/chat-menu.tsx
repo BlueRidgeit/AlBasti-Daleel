@@ -103,7 +103,7 @@ export function ChatMenu({
     setOpen(true);
   };
 
-  const itemCls = `flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs text-sidebar-foreground/90 transition hover:bg-white/10 ${
+  const itemCls = `flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-[#1a2547] transition hover:bg-black/10 ${
     isArabic ? "flex-row-reverse text-right" : "text-left"
   }`;
 
@@ -146,7 +146,7 @@ export function ChatMenu({
                   width: MENU_WIDTH,
                   maxHeight: "calc(100vh - 16px)",
                 }}
-                className="fixed z-50 overflow-y-auto rounded-xl border border-white/12 bg-sidebar p-1 text-sidebar-foreground shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
+                className="fixed z-50 overflow-y-auto rounded-xl border border-black/10 bg-[#f7941e] p-1 text-[#1a2547] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
               >
                 {!projectPicker ? (
                   <>
@@ -233,11 +233,11 @@ export function ChatMenu({
                       </button>
                     ) : null}
 
-                    <div className="my-1 h-px bg-white/10" />
+                    <div className="my-1 h-px bg-black/15" />
 
                     <button
                       type="button"
-                      className={`${itemCls} text-red-300 hover:bg-red-500/15 hover:text-red-200`}
+                      className={`${itemCls} text-red-800 hover:bg-black/10 hover:text-red-900`}
                       onClick={() => {
                         onDelete(chat.id);
                         close();
@@ -250,7 +250,7 @@ export function ChatMenu({
                 ) : (
                   <div className="max-h-72 overflow-y-auto">
                     <p
-                      className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/45 ${
+                      className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-black/50 ${
                         isArabic ? "text-right" : "text-left"
                       }`}
                     >
@@ -287,7 +287,7 @@ export function ChatMenu({
                         }}
                         placeholder={copy.projectsNew}
                         dir={isArabic ? "rtl" : "ltr"}
-                        className="min-w-0 flex-1 rounded-md border border-white/12 bg-white/5 px-2 py-1 text-xs text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus:border-white/25 focus:outline-none"
+                        className="min-w-0 flex-1 rounded-md border border-black/20 bg-white/60 px-2 py-1 text-xs text-slate-900 placeholder:text-slate-600 focus:border-black/40 focus:outline-none"
                       />
                       <button
                         type="button"
