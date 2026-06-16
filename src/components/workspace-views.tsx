@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  CheckSquareIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderIcon,
@@ -14,6 +15,7 @@ import {
   PlusIcon,
   SearchIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
 
 import { ChatMenu } from "@/components/chat-menu";
@@ -51,6 +53,7 @@ export type ChatActions = {
   onPinToggle: (id: string, pinned: boolean) => void;
   onRename: (id: string) => void;
   onDelete: (id: string) => void;
+  onDeleteMany: (ids: string[]) => void;
   onSetProject: (id: string, projectId: string | null) => void;
   onCreateProjectWithChat: (id: string, name: string) => void;
   onMove: (id: string, direction: "up" | "down") => void;
@@ -89,6 +92,9 @@ export function ChatRow({
   canMoveDown,
   actions,
   onRenameSubmit,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   chat: ChatEntry;
   locale: AppLocale;
@@ -102,6 +108,9 @@ export function ChatRow({
   canMoveDown: boolean;
   actions: ChatActions;
   onRenameSubmit: (id: string, title: string | null) => void;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const [draft, setDraft] = useState(chat.title);
 
@@ -182,12 +191,23 @@ export function ChatRow({
   return (
     <div
       className={`group/item flex items-center gap-3 border-b border-slate-200/70 px-2 py-3 ${
-        isArabic ? "flex-row-reverse" : ""
+        selected ? "bg-primary/5" : ""
       }`}
     >
+      {selectionMode ? (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect?.(chat.id)}
+          aria-label={chat.title}
+          className="size-4 shrink-0 cursor-pointer accent-primary"
+        />
+      ) : null}
       <button
         type="button"
-        onClick={() => actions.onOpen(chat.id)}
+        onClick={() =>
+          selectionMode ? onToggleSelect?.(chat.id) : actions.onOpen(chat.id)
+        }
         className={`min-w-0 flex-1 ${isArabic ? "text-right" : "text-left"}`}
       >
         <span className="block truncate text-sm font-medium text-slate-900">
@@ -202,7 +222,7 @@ export function ChatRow({
       <span className="shrink-0 text-xs text-slate-400">
         {formatRelativeDate(chat.updatedAt, locale)}
       </span>
-      {menu}
+      {selectionMode ? null : menu}
     </div>
   );
 }
@@ -235,6 +255,9 @@ export function AllChatsView({
   const copy = appCopy[locale];
   const [query, setQuery] = useState("");
 
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return needle
@@ -242,24 +265,99 @@ export function AllChatsView({
       : chats;
   }, [chats, query]);
 
+  const toggleSelect = (id: string) =>
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((chat) => selectedIds.has(chat.id));
+
+  const toggleSelectAll = () =>
+    setSelectedIds(
+      allFilteredSelected ? new Set() : new Set(filtered.map((chat) => chat.id)),
+    );
+
+  const selectedCount = selectedIds.size;
+
+  const handleBulkDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const message = isArabic
+      ? `حذف ${ids.length} محادثة؟`
+      : `Delete ${ids.length} conversation${ids.length === 1 ? "" : "s"}?`;
+    if (!window.confirm(message)) return;
+    actions.onDeleteMany(ids);
+    exitSelection();
+  };
+
   return (
     <div
       dir={isArabic ? "rtl" : "ltr"}
       className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-8"
     >
-      <div className={`${viewHeaderCls} ${isArabic ? "flex-row-reverse" : ""}`}>
-        <h2 className="flex-1 text-2xl font-semibold tracking-tight text-slate-950">
-          {copy.chatsTitle}
-        </h2>
-        <button
-          type="button"
-          onClick={onNewChat}
-          className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
-          <PlusIcon className="size-4" />
-          {copy.navNewChat}
-        </button>
-      </div>
+      {selectionMode ? (
+        <div className={viewHeaderCls}>
+          <button
+            type="button"
+            onClick={exitSelection}
+            aria-label={copy.cancel}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+          >
+            <XIcon className="size-5" />
+          </button>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700">
+            {isArabic ? `${selectedCount} محدد` : `${selectedCount} selected`}
+          </span>
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            className="shrink-0 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            {copy.selectAll}
+          </button>
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            disabled={selectedCount === 0}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+          >
+            <Trash2Icon className="size-4" />
+            {copy.historyDelete}
+          </button>
+        </div>
+      ) : (
+        <div className={viewHeaderCls}>
+          <h2 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
+            {copy.chatsTitle}
+          </h2>
+          <button
+            type="button"
+            onClick={() => setSelectionMode(true)}
+            disabled={chats.length === 0}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            <CheckSquareIcon className="size-4" />
+            {copy.selectLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+          >
+            <PlusIcon className="size-4" />
+            {copy.navNewChat}
+          </button>
+        </div>
+      )}
 
       <div className="relative mb-2">
         <SearchIcon
@@ -297,6 +395,9 @@ export function AllChatsView({
               canMoveDown={false}
               actions={actions}
               onRenameSubmit={onRenameSubmit}
+              selectionMode={selectionMode}
+              selected={selectedIds.has(chat.id)}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </div>

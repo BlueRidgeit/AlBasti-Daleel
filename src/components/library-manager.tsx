@@ -26,9 +26,11 @@ type AdminLibrary = {
 export function LibraryManager({
   locale,
   isArabic,
+  variant = "sidebar",
 }: {
   locale: AppLocale;
   isArabic: boolean;
+  variant?: "sidebar" | "settings";
 }) {
   const copy = appCopy[locale];
   const [open, setOpen] = useState(false);
@@ -129,11 +131,17 @@ export function LibraryManager({
       }}
     >
       <DialogTrigger
-        className={`flex w-full items-center gap-3 rounded-2xl border border-sidebar-border bg-sidebar-accent/50 px-4 py-3 text-sidebar-foreground transition hover:border-sidebar-primary/30 hover:bg-sidebar-accent ${
-          isArabic ? "flex-row-reverse text-right" : "text-left"
-        }`}
+        className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+          variant === "settings"
+            ? "border-primary/15 bg-primary/5 text-primary hover:border-primary/30 hover:bg-primary/10"
+            : "border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:border-sidebar-primary/30 hover:bg-sidebar-accent"
+        } ${isArabic ? "flex-row-reverse text-right" : "text-left"}`}
       >
-        <span className="inline-flex size-9 items-center justify-center rounded-2xl bg-white/10">
+        <span
+          className={`inline-flex size-9 items-center justify-center rounded-2xl ${
+            variant === "settings" ? "bg-white text-primary shadow-sm" : "bg-white/10"
+          }`}
+        >
           <LibraryBigIcon className="size-4" />
         </span>
         <span className="min-w-0 flex-1 text-sm font-medium">

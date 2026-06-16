@@ -6,7 +6,9 @@ import { useMsal } from "@azure/msal-react";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LanguagesIcon, LogOutIcon, ShieldCheckIcon, UserCircle2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
+import { getApiAccessToken } from "@/lib/auth-browser";
 import { appCopy, defaultLocale, localeLabels, type AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
@@ -22,6 +24,7 @@ const getStoredLocale = (): AppLocale => {
 
 export default function SettingsPage() {
   const [locale, setLocale] = useState<AppLocale>(defaultLocale);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   useEffect(() => {
     setLocale(getStoredLocale());
@@ -31,6 +34,24 @@ export default function SettingsPage() {
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
   }, [locale]);
+
+  useEffect(() => {
+    if (!isAuthEnabled()) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getApiAccessToken().catch(() => undefined);
+      if (!token) return;
+      const res = await fetch("/api/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined);
+      if (!res?.ok) return;
+      const data = (await res.json()) as { isGlobalAdmin?: boolean };
+      if (!cancelled) setIsGlobalAdmin(Boolean(data?.isGlobalAdmin));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const copy = appCopy[locale];
   const isArabic = locale === "ar";
@@ -51,17 +72,17 @@ export default function SettingsPage() {
                 <Image
                   src="/albastilogo.png"
                   alt="Al Basti"
-                  width={52}
-                  height={52}
+                  width={104}
+                  height={104}
                   priority
-                  className="h-12 w-12 object-contain"
+                  className="h-24 w-24 object-contain"
                 />
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary/70">
                     {copy.navSettings}
                   </p>
                   <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
-                    {isArabic ? "إعدادات التطبيق" : "Application settings"}
+                    {isArabic ? "إعدادات تطبيق دليل" : "Daleel application settings"}
                   </h1>
                   <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-700">
                     {isArabic
@@ -83,7 +104,11 @@ export default function SettingsPage() {
 
           <div className="grid gap-5 px-6 py-6 md:grid-cols-[1.05fr_0.95fr]">
             <AccountCard locale={locale} />
-            <PreferencesCard locale={locale} setLocale={setLocale} />
+            <PreferencesCard
+              locale={locale}
+              setLocale={setLocale}
+              isGlobalAdmin={isGlobalAdmin}
+            />
           </div>
         </div>
       </div>
@@ -97,6 +122,7 @@ function AccountCard({ locale }: { locale: AppLocale }) {
   const account = instance.getActiveAccount() ?? accounts[0];
   const isArabic = locale === "ar";
   const authEnabled = isAuthEnabled();
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
 
   const initials = (account?.name ?? account?.username ?? "U")
     .split(/\s+/)
@@ -104,6 +130,38 @@ function AccountCard({ locale }: { locale: AppLocale }) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || "U";
+
+  // Load the signed-in user's Entra ID profile photo (Graph User.Read).
+  // Falls back to initials if there's no photo or User.Read isn't consented.
+  useEffect(() => {
+    if (!account) return;
+    let active = true;
+    let createdUrl: string | undefined;
+    (async () => {
+      try {
+        const result = await instance.acquireTokenSilent({
+          scopes: ["User.Read"],
+          account,
+        });
+        const response = await fetch(
+          "https://graph.microsoft.com/v1.0/me/photo/$value",
+          { headers: { Authorization: `Bearer ${result.accessToken}` } },
+        );
+        if (!response.ok) return;
+        const blob = await response.blob();
+        createdUrl = URL.createObjectURL(blob);
+        if (active) setPhotoUrl(createdUrl);
+        else URL.revokeObjectURL(createdUrl);
+      } catch {
+        // No photo / no User.Read consent — keep the initials avatar.
+      }
+    })();
+    return () => {
+      active = false;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.homeAccountId]);
 
   const handleSignOut = async () => {
     await instance.logoutRedirect({
@@ -115,9 +173,18 @@ function AccountCard({ locale }: { locale: AppLocale }) {
   return (
     <section className="rounded-[1.5rem] border border-slate-200/80 bg-white/85 p-5 shadow-[0_22px_70px_-50px_rgba(23,35,52,0.35)]">
       <div className={`flex items-center gap-3 ${isArabic ? "flex-row-reverse text-right" : "text-left"}`}>
-        <div className="inline-flex size-12 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-          {initials}
-        </div>
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photoUrl}
+            alt=""
+            className="size-12 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+            {initials}
+          </div>
+        )}
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/70">
             {copy.accountSection}
@@ -175,9 +242,11 @@ function AccountCard({ locale }: { locale: AppLocale }) {
 function PreferencesCard({
   locale,
   setLocale,
+  isGlobalAdmin,
 }: {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
+  isGlobalAdmin: boolean;
 }) {
   const isArabic = locale === "ar";
 
@@ -233,11 +302,18 @@ function PreferencesCard({
         })}
       </div>
 
-      <div className={`mt-6 rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(205,170,72,0.12),rgba(255,255,255,0.85))] p-4 text-sm leading-6 text-slate-700 ${isArabic ? "text-right" : "text-left"}`}>
-        {isArabic
-          ? "سنضيف لاحقًا إعدادات إضافية مثل تفضيلات الذاكرة وسلوك الاستجابة لكل مستخدم بعد اكتمال النشر وإعداد قاعدة البيانات."
-          : "Additional per-user settings such as chat memory and response behavior will be added after deployment and database setup are complete."}
-      </div>
+      {isGlobalAdmin ? (
+        <div className="mt-6">
+          <div
+            className={`mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary/70 ${
+              isArabic ? "text-right" : "text-left"
+            }`}
+          >
+            {isArabic ? "الإدارة" : "Administration"}
+          </div>
+          <LibraryManager locale={locale} isArabic={isArabic} variant="settings" />
+        </div>
+      ) : null}
     </section>
   );
 }

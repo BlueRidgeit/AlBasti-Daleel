@@ -435,6 +435,24 @@ export function LegalWorkspace({
     await loadHistory(locale);
   };
 
+  // Bulk delete from the multi-select "All chats" view. The confirm happens in
+  // the view (one prompt for the whole batch), so no per-item confirm here.
+  const handleDeleteMany = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const accessToken = await getApiAccessToken().catch(() => undefined);
+    if (!accessToken) return;
+    await Promise.all(
+      ids.map((id) =>
+        fetch(`/api/history/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }).catch(() => undefined),
+      ),
+    );
+    if (activeThread?.id && ids.includes(activeThread.id)) handleNewChat();
+    await loadHistory(locale);
+  };
+
   const handleSetProject = async (id: string, projectId: string | null) => {
     await patchThreadApi(id, { projectId });
     await loadHistory(locale);
@@ -546,6 +564,7 @@ export function LegalWorkspace({
     onPinToggle: handlePinToggle,
     onRename: (id) => setRenamingId(id),
     onDelete: handleDelete,
+    onDeleteMany: handleDeleteMany,
     onSetProject: handleSetProject,
     onCreateProjectWithChat: handleCreateProjectWithChat,
     onMove: handleMove,
