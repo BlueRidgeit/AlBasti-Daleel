@@ -1125,7 +1125,7 @@ function NavButton({
 }) {
   const className = `flex w-full items-center gap-3 rounded-2xl border px-4 py-2.5 transition ${
     primary
-      ? "border-[#dab74c] bg-[#dab74c] text-[#1a2547] hover:bg-[#dab74c]/90"
+      ? "border-[#dab74c] bg-[#dab74c] text-white hover:bg-[#dab74c]/90"
       : "border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:border-sidebar-primary/30 hover:bg-sidebar-accent"
   } ${isArabic ? "flex-row-reverse text-right" : "text-left"}`;
 

@@ -103,7 +103,7 @@ export function ChatMenu({
     setOpen(true);
   };
 
-  const itemCls = `flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-[#1a2547] transition hover:bg-black/10 ${
+  const itemCls = `flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black/10 ${
     isArabic ? "flex-row-reverse text-right" : "text-left"
   }`;
 
@@ -146,7 +146,7 @@ export function ChatMenu({
                   width: MENU_WIDTH,
                   maxHeight: "calc(100vh - 16px)",
                 }}
-                className="fixed z-50 overflow-y-auto rounded-xl border border-black/10 bg-[#dab74c] p-1 text-[#1a2547] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
+                className="fixed z-50 overflow-y-auto rounded-xl border border-black/10 bg-[#dab74c] p-1 text-white shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
               >
                 {!projectPicker ? (
                   <>
@@ -250,7 +250,7 @@ export function ChatMenu({
                 ) : (
                   <div className="max-h-72 overflow-y-auto">
                     <p
-                      className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#1a2547]/60 ${
+                      className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 ${
                         isArabic ? "text-right" : "text-left"
                       }`}
                     >
