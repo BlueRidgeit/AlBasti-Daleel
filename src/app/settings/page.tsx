@@ -68,7 +68,7 @@ export default function SettingsPage() {
         <div className="rounded-[1.75rem] border border-white/70 bg-white/70 shadow-[0_30px_90px_-45px_rgba(23,35,52,0.45)] backdrop-blur">
           <header className="border-b border-slate-200/80 bg-[linear-gradient(135deg,_rgba(38,53,139,0.08),_rgba(205,170,72,0.14))] px-6 py-5">
             <div className={`flex flex-col gap-4 ${isArabic ? "text-right" : "text-left"} md:flex-row md:items-start md:justify-between`}>
-              <div className={`flex items-start gap-4 ${isArabic ? "md:flex-row-reverse" : ""}`}>
+              <div className="flex items-start gap-4">
                 <Image
                   src="/albastilogo.png"
                   alt="Al Basti"

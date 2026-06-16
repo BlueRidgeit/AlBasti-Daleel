@@ -146,7 +146,7 @@ export function ChatMenu({
                   width: MENU_WIDTH,
                   maxHeight: "calc(100vh - 16px)",
                 }}
-                className="fixed z-50 overflow-y-auto rounded-xl border border-black/10 bg-[#f7941e] p-1 text-sidebar-foreground shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
+                className="fixed z-50 overflow-y-auto rounded-xl border border-black/10 bg-[#dab74c] p-1 text-sidebar-foreground shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]"
               >
                 {!projectPicker ? (
                   <>
