@@ -1125,7 +1125,7 @@ function NavButton({
 }) {
   const className = `flex w-full items-center gap-3 rounded-2xl border px-4 py-2.5 transition ${
     primary
-      ? "border-sidebar-primary/50 bg-sidebar-primary text-sidebar-foreground hover:bg-sidebar-primary/90"
+      ? "border-[#dab74c] bg-[#dab74c] text-[#1a2547] hover:bg-[#dab74c]/90"
       : "border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:border-sidebar-primary/30 hover:bg-sidebar-accent"
   } ${isArabic ? "flex-row-reverse text-right" : "text-left"}`;
 
@@ -1133,7 +1133,7 @@ function NavButton({
     <button type="button" onClick={onClick} className={className}>
       <span
         className={`inline-flex size-9 items-center justify-center rounded-2xl ${
-          primary ? "bg-primary/18" : "bg-white/10"
+          primary ? "bg-black/10" : "bg-white/10"
         }`}
       >
         <Icon className="size-4" />

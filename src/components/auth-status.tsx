@@ -337,7 +337,7 @@ function AccountBarInner({
     });
   };
 
-  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition hover:bg-black/10 ${
+  const itemCls = `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#1a2547] transition hover:bg-black/10 ${
     isArabic ? "flex-row-reverse text-right" : "text-left"
   }`;
 
@@ -358,7 +358,7 @@ function AccountBarInner({
           </button>
 
           <div
-            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60 ${
+            className={`px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[#1a2547]/60 ${
               isArabic ? "text-right" : "text-left"
             }`}
           >
@@ -382,7 +382,7 @@ function AccountBarInner({
           <div className="my-1 h-px bg-black/15" />
           <button
             type="button"
-            className={`${itemCls} text-red-800 hover:bg-black/10 hover:text-red-900`}
+            className={`${itemCls} !text-red-800 hover:bg-black/10 hover:!text-red-900`}
             onClick={handleSignOut}
           >
             <LogOutIcon className="size-4" />
