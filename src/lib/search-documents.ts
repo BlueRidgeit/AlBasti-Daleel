@@ -19,6 +19,8 @@ type AzureSearchHit = {
   library?: string;
   driveId?: string;
   url?: string;
+  folderUrl?: string;
+  fileType?: string;
   lastModified?: string;
   content?: string;
 };
@@ -525,7 +527,7 @@ export async function searchDocumentsAdvanced(
     queryType: "full",
     searchFields: "content,contentAr,title",
     top: fetchTop,
-    select: "id,title,url,lastModified,content,library,driveId,itemId",
+    select: "id,title,url,lastModified,content,library,driveId,itemId,fileType,folderUrl",
     ...(libraryFilter ? { filter: libraryFilter } : {}),
   });
 
@@ -542,7 +544,11 @@ export async function searchDocumentsAdvanced(
       continue;
     }
 
-    const { fileType, folderUrl } = parseFileUrl(hit.url);
+    // Prefer the indexed fields (populated by the indexer / backfill); fall back to
+    // deriving from the URL for any chunk not yet carrying them.
+    const parsed = parseFileUrl(hit.url);
+    const fileType = (hit.fileType?.trim() as FileTypeCategory) || parsed.fileType;
+    const folderUrl = hit.folderUrl?.trim() || parsed.folderUrl;
     deduped.set(itemId, {
       itemId,
       chunkId: hit.id,
