@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CheckSquareIcon,
+  ChevronDownIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderIcon,
@@ -38,7 +39,13 @@ export type ChatEntry = {
   projectName?: string;
 };
 
-export type ProjectEntry = { id: string; name: string; description?: string };
+export type ProjectEntry = {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 export type SearchDoc = {
   itemId: string;
@@ -533,6 +540,10 @@ export function ProjectsView({
 }) {
   const copy = appCopy[locale];
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"updated" | "name" | "created">("updated");
+  const [cardMenu, setCardMenu] = useState<
+    { project: ProjectEntry; top: number; left: number } | null
+  >(null);
   const [selected, setSelected] = useState<ProjectEntry | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectEntry | null>(null);
@@ -560,6 +571,18 @@ export function ProjectsView({
   };
 
   const Back = isArabic ? ArrowRightIcon : ArrowLeftIcon;
+
+  const openCardMenu = (
+    project: ProjectEntry,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = 200;
+    const rawLeft = isArabic ? rect.left : rect.right - width;
+    const left = Math.min(Math.max(8, rawLeft), window.innerWidth - width - 8);
+    setCardMenu({ project, top: rect.bottom + 6, left });
+  };
 
   const handleModalSubmit = async (name: string, description: string) => {
     if (editing) {
@@ -806,22 +829,109 @@ export function ProjectsView({
       )
     : projects;
 
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "name") {
+      return a.name.localeCompare(b.name, isArabic ? "ar" : "en");
+    }
+    if (sortBy === "created") {
+      return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+    }
+    return (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+  });
+
+  const cardMenuPortal =
+    mounted && cardMenu
+      ? createPortal(
+          <>
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={() => setCardMenu(null)}
+              className="fixed inset-0 z-40 cursor-default"
+            />
+            <div
+              role="menu"
+              dir={isArabic ? "rtl" : "ltr"}
+              style={{ top: cardMenu.top, left: cardMenu.left, width: 200 }}
+              className="fixed z-50 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(cardMenu.project);
+                  setModalOpen(true);
+                  setCardMenu(null);
+                }}
+                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 ${
+                  isArabic ? "flex-row-reverse text-right" : "text-left"
+                }`}
+              >
+                <PencilIcon className="size-4 shrink-0" />
+                <span className="flex-1">{copy.menuEditDetails}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAlsoDeleteChats(false);
+                  setDeleteTarget(cardMenu.project);
+                  setCardMenu(null);
+                }}
+                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 ${
+                  isArabic ? "flex-row-reverse text-right" : "text-left"
+                }`}
+              >
+                <Trash2Icon className="size-4 shrink-0" />
+                <span className="flex-1">{copy.projectDelete}</span>
+              </button>
+            </div>
+          </>,
+          document.body,
+        )
+      : null;
+
   return (
     <div
       dir={isArabic ? "rtl" : "ltr"}
-      className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-8"
+      className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-8"
     >
-      <div className={`${viewHeaderCls} ${isArabic ? "flex-row-reverse" : ""}`}>
-        <h2 className="flex-1 text-2xl font-semibold tracking-tight text-slate-950">
+      <div className={viewHeaderCls}>
+        <h2 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
           {copy.projectsTitle}
         </h2>
+        {projects.length > 0 ? (
+          <div className={`flex shrink-0 items-center gap-1.5 ${isArabic ? "flex-row-reverse" : ""}`}>
+            <span className="hidden text-xs text-slate-400 sm:inline">{copy.sortBy}</span>
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(event) =>
+                  setSortBy(event.target.value as "updated" | "name" | "created")
+                }
+                dir={isArabic ? "rtl" : "ltr"}
+                className={`cursor-pointer appearance-none rounded-full border border-slate-200 bg-white py-2 text-sm text-slate-700 transition focus:border-primary/40 focus:outline-none ${
+                  isArabic ? "pr-4 pl-9 text-right" : "pl-4 pr-9 text-left"
+                }`}
+              >
+                <option value="updated">{copy.sortLastUpdated}</option>
+                <option value="name">{copy.sortName}</option>
+                <option value="created">{copy.sortCreated}</option>
+              </select>
+              <ChevronDownIcon
+                className={`pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-slate-400 ${
+                  isArabic ? "left-3" : "right-3"
+                }`}
+              />
+            </div>
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={() => {
             setEditing(null);
             setModalOpen(true);
           }}
-          className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
         >
           <FolderPlusIcon className="size-4" />
           {copy.projectsNew}
@@ -847,35 +957,49 @@ export function ProjectsView({
         </div>
       ) : null}
 
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <p className="py-12 text-center text-sm text-slate-500">{copy.projectsEmpty}</p>
       ) : (
-        <div className="grid gap-2.5">
-          {filtered.map((project) => {
+        <div className="grid gap-3 sm:grid-cols-2">
+          {sorted.map((project) => {
             const count = chats.filter((chat) => chat.projectId === project.id).length;
             return (
-              <button
+              <div
                 key={project.id}
-                type="button"
-                onClick={() => setSelected(project)}
-                className={`flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-primary/30 ${
-                  isArabic ? "flex-row-reverse text-right" : "text-left"
-                }`}
+                className="group/card relative rounded-2xl border border-slate-200 bg-white transition hover:border-primary/30 hover:shadow-sm"
               >
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <FolderIcon className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-slate-900">
+                <button
+                  type="button"
+                  onClick={() => setSelected(project)}
+                  className={`block w-full p-4 ${isArabic ? "text-right" : "text-left"}`}
+                >
+                  <span
+                    className={`block truncate text-sm font-semibold text-slate-900 ${
+                      isArabic ? "pl-8" : "pr-8"
+                    }`}
+                  >
                     {project.name}
                   </span>
-                  <span className="block truncate text-xs text-slate-500">
-                    {project.description
-                      ? project.description
+                  <span className="mt-1.5 block min-h-[3.75rem] text-xs leading-5 text-slate-500 line-clamp-3">
+                    {project.description || ""}
+                  </span>
+                  <span className="mt-3 block text-[11px] text-slate-400">
+                    {project.updatedAt
+                      ? `${copy.updatedPrefix} ${formatRelativeDate(project.updatedAt, locale)}`
                       : `${count} ${copy.chatsTitle}`}
                   </span>
-                </span>
-              </button>
+                </button>
+                <button
+                  type="button"
+                  aria-label="More options"
+                  onClick={(event) => openCardMenu(project, event)}
+                  className={`absolute top-3 inline-flex size-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 ${
+                    isArabic ? "left-3" : "right-3"
+                  }`}
+                >
+                  <MoreVerticalIcon className="size-4" />
+                </button>
+              </div>
             );
           })}
         </div>
@@ -883,6 +1007,7 @@ export function ProjectsView({
 
       {projectModal}
       {deleteModal}
+      {cardMenuPortal}
     </div>
   );
 }
