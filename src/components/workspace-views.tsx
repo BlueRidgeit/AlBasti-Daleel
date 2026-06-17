@@ -45,6 +45,8 @@ export type SearchDoc = {
   title: string;
   snippet: string;
   url?: string;
+  folderUrl?: string;
+  fileType?: string;
   library?: string;
 };
 
@@ -941,18 +943,39 @@ export function SearchResultsView({
                   <p className="mt-1 line-clamp-3 text-sm leading-6 text-slate-600">
                     {doc.snippet}
                   </p>
-                  {doc.url ? (
-                    <a
-                      href={doc.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline ${
+                  {doc.url || doc.folderUrl ? (
+                    <div
+                      className={`mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 ${
                         isArabic ? "flex-row-reverse" : ""
                       }`}
                     >
-                      <ExternalLinkIcon className="size-3.5" />
-                      {copy.openInSharePoint}
-                    </a>
+                      {doc.url ? (
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline ${
+                            isArabic ? "flex-row-reverse" : ""
+                          }`}
+                        >
+                          <ExternalLinkIcon className="size-3.5" />
+                          {copy.openInSharePoint}
+                        </a>
+                      ) : null}
+                      {doc.folderUrl ? (
+                        <a
+                          href={doc.folderUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-primary hover:underline ${
+                            isArabic ? "flex-row-reverse" : ""
+                          }`}
+                        >
+                          <FolderIcon className="size-3.5" />
+                          {copy.openFolder}
+                        </a>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </div>

@@ -1,5 +1,17 @@
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-server";
-import { searchDocumentsAdvanced } from "@/lib/search-documents";
+import {
+  searchDocumentsAdvanced,
+  type FileTypeCategory,
+} from "@/lib/search-documents";
+
+const FILE_TYPE_VALUES: FileTypeCategory[] = [
+  "word",
+  "pdf",
+  "text",
+  "excel",
+  "powerpoint",
+  "image",
+];
 
 export const runtime = "nodejs";
 
@@ -18,12 +30,19 @@ export async function POST(request: Request) {
         withoutWords?: string;
         partWords?: string;
         libraries?: string[];
+        fileTypes?: string[];
       }
     | undefined;
 
   if (!body || typeof body !== "object") {
     return Response.json({ error: "A JSON body is required." }, { status: 400 });
   }
+
+  const fileTypes = Array.isArray(body.fileTypes)
+    ? body.fileTypes.filter((value): value is FileTypeCategory =>
+        FILE_TYPE_VALUES.includes(value as FileTypeCategory),
+      )
+    : undefined;
 
   try {
     const result = await searchDocumentsAdvanced({
@@ -33,6 +52,7 @@ export async function POST(request: Request) {
       withoutWords: body.withoutWords,
       partWords: body.partWords,
       libraries: Array.isArray(body.libraries) ? body.libraries : undefined,
+      fileTypes,
     });
 
     return Response.json(result);

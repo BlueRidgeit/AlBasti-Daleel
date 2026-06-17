@@ -11,6 +11,7 @@ export type QueryCriteria = {
   exactPhrase: string;
   withoutWords: string;
   partWords: string;
+  fileTypes: string[];
 };
 
 const EMPTY: QueryCriteria = {
@@ -19,7 +20,16 @@ const EMPTY: QueryCriteria = {
   exactPhrase: "",
   withoutWords: "",
   partWords: "",
+  fileTypes: [],
 };
+
+const TEXT_KEYS = [
+  "allWords",
+  "anyWords",
+  "exactPhrase",
+  "withoutWords",
+  "partWords",
+] as const;
 
 export function QueryBuilder({
   locale,
@@ -36,9 +46,26 @@ export function QueryBuilder({
   const [open, setOpen] = useState(false);
   const [criteria, setCriteria] = useState<QueryCriteria>(EMPTY);
 
-  const hasAny = Object.values(criteria).some((value) => value.trim());
+  const hasAny = TEXT_KEYS.some((key) => criteria[key].trim());
 
-  const field = (key: keyof QueryCriteria, label: string) => (
+  const fileTypeOptions: { key: string; label: string }[] = [
+    { key: "word", label: copy.ftWord },
+    { key: "pdf", label: copy.ftPdf },
+    { key: "text", label: copy.ftText },
+    { key: "excel", label: copy.ftExcel },
+    { key: "powerpoint", label: copy.ftPowerpoint },
+    { key: "image", label: copy.ftImage },
+  ];
+
+  const toggleType = (key: string) =>
+    setCriteria((prev) => ({
+      ...prev,
+      fileTypes: prev.fileTypes.includes(key)
+        ? prev.fileTypes.filter((value) => value !== key)
+        : [...prev.fileTypes, key],
+    }));
+
+  const field = (key: (typeof TEXT_KEYS)[number], label: string) => (
     <label className={`block ${isArabic ? "text-right" : "text-left"}`}>
       <span className="mb-1 block text-[11px] font-medium text-slate-600">
         {label}
@@ -88,6 +115,32 @@ export function QueryBuilder({
           {field("exactPhrase", copy.qbExactPhrase)}
           {field("withoutWords", copy.qbWithoutWords)}
           {field("partWords", copy.qbPartWords)}
+
+          <div className={isArabic ? "text-right" : "text-left"}>
+            <span className="mb-1.5 block text-[11px] font-medium text-slate-600">
+              {copy.qbFileType}
+            </span>
+            <div className={`flex flex-wrap gap-1.5 ${isArabic ? "flex-row-reverse" : ""}`}>
+              {fileTypeOptions.map((option) => {
+                const active = criteria.fileTypes.includes(option.key);
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleType(option.key)}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-primary/30"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className={`flex items-center gap-2 ${isArabic ? "flex-row-reverse" : ""}`}>
             <button

@@ -27,6 +27,15 @@ type AzureSearchResponse = {
   value?: AzureSearchHit[];
 };
 
+export type FileTypeCategory =
+  | "word"
+  | "pdf"
+  | "text"
+  | "excel"
+  | "powerpoint"
+  | "image"
+  | "other";
+
 export type SearchDocumentMatch = {
   itemId: string;
   chunkId: string;
@@ -34,6 +43,8 @@ export type SearchDocumentMatch = {
   library?: string;
   driveId?: string;
   url?: string;
+  folderUrl?: string;
+  fileType?: FileTypeCategory;
   lastModified?: string;
   snippet: string;
   score: number;
@@ -75,6 +86,48 @@ const getSnippet = (hit: AzureSearchHit) => {
 const extractItemIdFromChunkId = (chunkId: string) => {
   const separatorIndex = chunkId.indexOf("-");
   return separatorIndex === -1 ? chunkId : chunkId.slice(0, separatorIndex);
+};
+
+// The index has no file-type or folder field, so we derive both from the URL.
+const FILE_TYPE_BY_EXT: Record<string, FileTypeCategory> = {
+  doc: "word", docx: "word", rtf: "word", odt: "word",
+  pdf: "pdf",
+  txt: "text", md: "text", csv: "text",
+  xls: "excel", xlsx: "excel", xlsm: "excel", xlsb: "excel", ods: "excel",
+  ppt: "powerpoint", pptx: "powerpoint", odp: "powerpoint",
+  jpg: "image", jpeg: "image", png: "image", gif: "image",
+  bmp: "image", tif: "image", tiff: "image", webp: "image", heic: "image",
+};
+
+const fileTypeFromExt = (ext?: string): FileTypeCategory =>
+  (ext ? FILE_TYPE_BY_EXT[ext] : undefined) ?? "other";
+
+const safeDecode = (value: string) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+// Returns the file's extension, the file type category, and the parent folder
+// URL. SharePoint "open in Office" links embed the real name in `?file=NAME.ext`
+// (and have no folder path); direct links carry the file as the last path segment.
+const parseFileUrl = (
+  url?: string,
+): { fileType: FileTypeCategory; folderUrl?: string } => {
+  if (!url) return { fileType: "other" };
+  const fileParam = url.match(/[?&]file=([^&]+)/i);
+  if (fileParam) {
+    const ext = safeDecode(fileParam[1]).split(".").pop()?.toLowerCase();
+    return { fileType: fileTypeFromExt(ext) };
+  }
+  const noQuery = url.split(/[?#]/)[0];
+  const lastSlash = noQuery.lastIndexOf("/");
+  if (lastSlash === -1) return { fileType: "other" };
+  const segment = safeDecode(noQuery.slice(lastSlash + 1));
+  const ext = segment.includes(".") ? segment.split(".").pop()?.toLowerCase() : undefined;
+  return { fileType: fileTypeFromExt(ext), folderUrl: noQuery.slice(0, lastSlash) };
 };
 
 const normalizeReference = (value: string) =>
@@ -391,6 +444,7 @@ export type AdvancedSearchInput = {
   withoutWords?: string;
   partWords?: string;
   libraries?: string[];
+  fileTypes?: FileTypeCategory[];
   top?: number;
 };
 
@@ -398,10 +452,16 @@ export type AdvancedSearchInput = {
 const escapeLuceneTerm = (term: string) =>
   term.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, "\\$1");
 
+// Strip wrapping quotes / brackets / box punctuation so a name written as
+// «اسم» / (اسم) / [اسم] / "اسم" / ﴾اسم﴿ matches the bare token. The Arabic
+// analyzer already drops these inside documents, so the fix is query-side.
+const WRAP_PUNCT = /^[\s"'«»“”‘’()[\]{}<>﴾﴿،,.;:!؟?‘’“”]+|[\s"'«»“”‘’()[\]{}<>﴾﴿،,.;:!؟?‘’“”]+$/g;
+const stripWrappingPunctuation = (token: string) => token.replace(WRAP_PUNCT, "");
+
 const tokenizeWords = (value?: string) =>
   (value ?? "")
     .split(/\s+/)
-    .map((token) => token.trim())
+    .map((token) => stripWrappingPunctuation(token.trim()))
     .filter(Boolean);
 
 // Build a single Azure AI Search full-Lucene query from the five criteria.
@@ -421,8 +481,8 @@ function buildLuceneQuery(input: AdvancedSearchInput): string {
     clauses.push(`+(${anyTokens.join(" OR ")})`);
   }
 
-  // EXACT PHRASE -> required quoted phrase.
-  const phrase = (input.exactPhrase ?? "").trim();
+  // EXACT PHRASE -> required quoted phrase (drop any wrapping quotes/brackets).
+  const phrase = stripWrappingPunctuation((input.exactPhrase ?? "").trim());
   if (phrase) {
     clauses.push(`+"${phrase.replace(/(["\\])/g, "\\$1")}"`);
   }
@@ -452,14 +512,19 @@ export async function searchDocumentsAdvanced(
     return { configured: true, query: "", totalMatches: 0, documents: [] };
   }
 
-  const top = Math.min(Math.max(input.top ?? 30, 1), 50);
+  const displayTop = Math.min(Math.max(input.top ?? 30, 1), 50);
+  const wantTypes = (input.fileTypes ?? []).filter(Boolean);
+  const filteringTypes = wantTypes.length > 0;
+  // The index has no file-type field, so type filtering is done in-app on the
+  // URL-derived type. Pull a larger candidate pool first so rare types surface.
+  const fetchTop = filteringTypes ? 1000 : displayTop;
   const libraryFilter = buildLibraryFilter(input.libraries);
 
   const response = await runAzureSearch({
     search: query,
     queryType: "full",
     searchFields: "content,contentAr,title",
-    top,
+    top: fetchTop,
     select: "id,title,url,lastModified,content,library,driveId,itemId",
     ...(libraryFilter ? { filter: libraryFilter } : {}),
   });
@@ -477,6 +542,7 @@ export async function searchDocumentsAdvanced(
       continue;
     }
 
+    const { fileType, folderUrl } = parseFileUrl(hit.url);
     deduped.set(itemId, {
       itemId,
       chunkId: hit.id,
@@ -484,15 +550,19 @@ export async function searchDocumentsAdvanced(
       library: hit.library?.trim() || undefined,
       driveId: hit.driveId?.trim() || undefined,
       url: hit.url,
+      folderUrl,
+      fileType,
       lastModified: hit.lastModified,
       snippet: getSnippet(hit),
       score,
     });
   }
 
+  const typeSet = new Set<FileTypeCategory>(wantTypes);
   const documents = [...deduped.values()]
+    .filter((doc) => !filteringTypes || typeSet.has(doc.fileType ?? "other"))
     .sort((left, right) => right.score - left.score)
-    .slice(0, top);
+    .slice(0, displayTop);
 
   return { configured: true, query, totalMatches: documents.length, documents };
 }
