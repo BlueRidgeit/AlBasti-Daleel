@@ -70,12 +70,12 @@ export default function SettingsPage() {
             <div className={`flex flex-col gap-4 ${isArabic ? "text-right" : "text-left"} md:flex-row md:items-start md:justify-between`}>
               <div className="flex items-start gap-4">
                 <Image
-                  src="/albastilogo.png"
-                  alt="Al Basti"
-                  width={104}
-                  height={104}
+                  src={isArabic ? "/daleel-logo-ar.png" : "/daleel-logo-en.png"}
+                  alt="Daleel"
+                  width={3000}
+                  height={850}
                   priority
-                  className="h-24 w-24 object-contain"
+                  className="h-16 w-auto object-contain"
                 />
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary/70">
