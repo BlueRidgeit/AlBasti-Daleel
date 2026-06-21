@@ -4,6 +4,7 @@ import {
   UserMessageAttachments,
 } from "@/components/attachment";
 import { MarkdownText } from "@/components/markdown-text";
+import { SearchSourcesToolUI } from "@/components/search-sources-tool-ui";
 import { ToolFallback } from "@/components/tool-fallback";
 import { TooltipIconButton } from "@/components/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export const Thread: FC<{ locale: AppLocale }> = ({ locale }) => {
         ["--composer-padding" as string]: "12px",
       }}
     >
+      <SearchSourcesToolUI locale={locale} />
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         className="aui-thread-viewport relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto scroll-smooth px-4 pt-4 md:px-6"

@@ -241,7 +241,7 @@ export async function searchDocuments(
   const response = await runAzureSearch({
     search: trimmedQuery || "*",
     top: candidateCount,
-    select: "id,title,url,lastModified,content,library,driveId,itemId",
+    select: "id,title,url,lastModified,content,library,driveId,itemId,fileType,folderUrl",
     queryType: useSemantic ? "semantic" : "simple",
     ...(libraryFilter ? { filter: libraryFilter } : {}),
     ...(queryVector
@@ -279,6 +279,7 @@ export async function searchDocuments(
       continue;
     }
 
+    const parsed = parseFileUrl(hit.url);
     deduped.set(itemId, {
       itemId,
       chunkId: hit.id,
@@ -286,6 +287,8 @@ export async function searchDocuments(
       library: hit.library?.trim() || undefined,
       driveId: hit.driveId?.trim() || undefined,
       url: hit.url,
+      folderUrl: hit.folderUrl?.trim() || parsed.folderUrl,
+      fileType: (hit.fileType?.trim() as FileTypeCategory) || parsed.fileType,
       lastModified: hit.lastModified,
       snippet: getSnippet(hit),
       score,
