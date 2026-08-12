@@ -44,9 +44,11 @@ export function AuthStatus({ locale }: { locale: AppLocale }) {
 
 export function AuthRequired({
   locale,
+  setLocale,
   children,
 }: {
   locale: AppLocale;
+  setLocale?: (locale: AppLocale) => void;
   children: React.ReactNode;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -60,24 +62,32 @@ export function AuthRequired({
   }
 
   if (!isAuthEnabled()) {
-    return <AuthLockedState locale={locale} setupPending />;
+    return (
+      <AuthLockedState locale={locale} setupPending setLocale={setLocale} />
+    );
   }
 
-  return <AuthenticatedGate locale={locale}>{children}</AuthenticatedGate>;
+  return (
+    <AuthenticatedGate locale={locale} setLocale={setLocale}>
+      {children}
+    </AuthenticatedGate>
+  );
 }
 
 function AuthenticatedGate({
   locale,
+  setLocale,
   children,
 }: {
   locale: AppLocale;
+  setLocale?: (locale: AppLocale) => void;
   children: React.ReactNode;
 }) {
   const { instance, accounts } = useMsal();
   const account = instance.getActiveAccount() ?? accounts[0];
 
   if (!account) {
-    return <AuthLockedState locale={locale} />;
+    return <AuthLockedState locale={locale} setLocale={setLocale} />;
   }
 
   return <>{children}</>;
@@ -85,10 +95,12 @@ function AuthenticatedGate({
 
 function AuthLockedState({
   locale,
+  setLocale,
   setupPending = false,
   loading = false,
 }: {
   locale: AppLocale;
+  setLocale?: (locale: AppLocale) => void;
   setupPending?: boolean;
   loading?: boolean;
 }) {
@@ -113,6 +125,52 @@ function AuthLockedState({
         {!setupPending && !loading ? (
           <SignInButton locale={locale} large className="mt-6" />
         ) : null}
+        {setLocale && !loading ? (
+          <LoginLanguageToggle locale={locale} setLocale={setLocale} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// Language selector shown on the sign-in screen so a user can pick English or Arabic
+// BEFORE logging in (the choice persists through the redirect via SignInButton).
+function LoginLanguageToggle({
+  locale,
+  setLocale,
+}: {
+  locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
+}) {
+  const isArabic = locale === "ar";
+
+  return (
+    <div className="mt-7 flex flex-col items-center gap-2">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        {isArabic ? "اللغة" : "Language"}
+      </span>
+      <div
+        className="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm"
+        dir="ltr"
+      >
+        {(["ar", "en"] as AppLocale[]).map((value) => {
+          const active = locale === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setLocale(value)}
+              aria-pressed={active}
+              className={`rounded-full px-5 py-1.5 text-sm font-medium transition ${
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {localeLabels[value]}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

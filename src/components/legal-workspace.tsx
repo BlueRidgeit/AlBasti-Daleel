@@ -650,6 +650,7 @@ export function LegalWorkspace({
   const workspace = (
     <Workspace
       locale={locale}
+      setLocale={setLocale}
       isArabic={isArabic}
       panelOpen={panelOpen}
       setPanelOpen={setPanelOpen}
@@ -757,6 +758,7 @@ function PanelSlot({ open, children }: { open: boolean; children: ReactNode }) {
 
 function Workspace({
   locale,
+  setLocale,
   isArabic,
   panelOpen,
   setPanelOpen,
@@ -764,6 +766,7 @@ function Workspace({
   children,
 }: {
   locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
   isArabic: boolean;
   panelOpen: boolean;
   setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -803,7 +806,9 @@ function Workspace({
       </div>
 
       <div className="min-h-0 flex-1">
-        <AuthRequired locale={locale}>{children}</AuthRequired>
+        <AuthRequired locale={locale} setLocale={setLocale}>
+          {children}
+        </AuthRequired>
       </div>
     </section>
   );
