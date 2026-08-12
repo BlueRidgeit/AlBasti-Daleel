@@ -2,6 +2,7 @@ import { ConfidentialClientApplication } from "@azure/msal-node";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 import { env, hasServerAuthConfig } from "@/lib/env";
+import { isAppAdmin } from "@/lib/app-admins";
 
 let confidentialClient: ConfidentialClientApplication | null = null;
 let signingKeys:
@@ -188,5 +189,16 @@ export async function getAuthenticatedUserFromRequest(request: Request) {
   }
 
   const payload = await validateApiAccessToken(token);
-  return mapAuthenticatedUser(payload);
+  const user = mapAuthenticatedUser(payload);
+
+  // Third admin source (after the tenant Global Admin role and the ADMIN_UPNS env list):
+  // the UI-managed app-admin allowlist in Cosmos. Only consult it when the token itself did
+  // not already establish admin, so we skip the Cosmos read for tenant/env admins.
+  if (user && !user.isGlobalAdmin && user.email) {
+    if (await isAppAdmin(user.email).catch(() => false)) {
+      user.isGlobalAdmin = true;
+    }
+  }
+
+  return user;
 }

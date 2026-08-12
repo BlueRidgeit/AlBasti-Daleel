@@ -6,6 +6,8 @@ import { useMsal } from "@azure/msal-react";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LanguagesIcon, LogOutIcon, ShieldCheckIcon, UserCircle2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { AdminManager } from "@/components/admin-manager";
+import { IndexHealth } from "@/components/index-health";
 import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
 import { getApiAccessToken } from "@/lib/auth-browser";
@@ -311,7 +313,11 @@ function PreferencesCard({
           >
             {isArabic ? "الإدارة" : "Administration"}
           </div>
-          <LibraryManager locale={locale} isArabic={isArabic} variant="settings" />
+          <div className="grid gap-2">
+            <LibraryManager locale={locale} isArabic={isArabic} variant="settings" />
+            <IndexHealth locale={locale} isArabic={isArabic} />
+            <AdminManager locale={locale} isArabic={isArabic} />
+          </div>
         </div>
       ) : null}
     </section>

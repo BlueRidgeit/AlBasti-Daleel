@@ -97,6 +97,10 @@ export const env = {
   azureCosmosSessionsContainer:
     trimToUndefined(process.env.AZURE_COSMOS_SESSIONS_CONTAINER) ??
     "sessionLogs",
+  // UI-managed app-admin allowlist (Cosmos). A third admin source alongside the tenant
+  // Global Administrator role (wids claim) and the ADMIN_UPNS env break-glass list.
+  azureCosmosAdminsContainer:
+    trimToUndefined(process.env.AZURE_COSMOS_ADMINS_CONTAINER) ?? "appAdmins",
   azureWebSearchCountry:
     trimToUndefined(process.env.AZURE_WEB_SEARCH_COUNTRY) ?? "AE",
   azureWebSearchContextSize:
