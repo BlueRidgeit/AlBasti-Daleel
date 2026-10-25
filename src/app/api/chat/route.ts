@@ -17,7 +17,7 @@ import {
   getRequestBearerToken,
 } from "@/lib/auth-server";
 import { logSessionEvent, persistChatThread } from "@/lib/chat-history";
-import { legalAgentSystemPrompt } from "@/lib/legal-agent";
+import { fileFinderPromptAddendum, legalAgentSystemPrompt } from "@/lib/legal-agent";
 import {
   buildLanguageDirective,
   resolveConversationLanguage,
@@ -124,7 +124,9 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
-    system: `${legalAgentSystemPrompt}\n\n## Current Conversation Language\n${languageDirective}`,
+    system: `${legalAgentSystemPrompt}${
+      env.promptProfile === "file-finder" ? `\n\n${fileFinderPromptAddendum}` : ""
+    }\n\n## Current Conversation Language\n${languageDirective}`,
     messages: await convertToModelMessages(modelMessages),
     tools: {
       ...frontendTools(tools ?? {}),

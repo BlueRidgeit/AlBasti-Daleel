@@ -101,6 +101,9 @@ export const env = {
   // Global Administrator role (wids claim) and the ADMIN_UPNS env break-glass list.
   azureCosmosAdminsContainer:
     trimToUndefined(process.env.AZURE_COSMOS_ADMINS_CONTAINER) ?? "appAdmins",
+  // Opt-in prompt profile. Unset (the default) keeps the original behaviour; "file-finder"
+  // adds the find-files / latest-version rules to the system prompt.
+  promptProfile: trimToUndefined(process.env.DALEEL_PROMPT_PROFILE)?.toLowerCase(),
   azureWebSearchCountry:
     trimToUndefined(process.env.AZURE_WEB_SEARCH_COUNTRY) ?? "AE",
   azureWebSearchContextSize:
