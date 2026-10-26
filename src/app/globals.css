@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-cairo);
+  --font-sans: var(--app-font, var(--font-cairo));
   --font-mono: var(--font-plex-mono);
-  --font-heading: var(--font-cairo);
+  --font-heading: var(--app-font, var(--font-cairo));
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -81,6 +81,20 @@
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.28 0.1 264);
   --sidebar-ring: oklch(0.72 0.14 75);
+
+  /* Look & feel hooks: these defaults reproduce the stock theme; Settings > Appearance
+     (when enabled) overrides them via an injected :root rule. */
+  --page-bg-from: #f6f4f0;
+  --page-bg-to: #ece7de;
+  --page-glow-1: rgba(38, 53, 139, 0.12);
+  --page-glow-2: rgba(205, 170, 72, 0.18);
+  --tint-1: rgba(38, 53, 139, 0.08);
+  --tint-2: rgba(205, 170, 72, 0.14);
+  --nav-cta: #dab74c;
+  --nav-cta-text: #ffffff;
+  --bubble-user: var(--primary);
+  --bubble-user-text: var(--primary-foreground);
+  --bubble-assistant: rgba(255, 255, 255, 0.72);
 }
 
 .dark {
@@ -140,7 +154,7 @@
   }
 
   html {
-    @apply font-sans;
+    font-family: var(--app-font, var(--font-cairo));
     font-size: 15px;
   }
 }
@@ -189,4 +203,15 @@ body {
 [dir="rtl"] .aui-md code,
 [dir="rtl"] .aui-md pre {
   unicode-bidi: isolate;
+}
+
+.bg-app {
+  background:
+    radial-gradient(circle at top left, var(--page-glow-1), transparent 28%),
+    radial-gradient(circle at bottom right, var(--page-glow-2), transparent 24%),
+    linear-gradient(180deg, var(--page-bg-from) 0%, var(--page-bg-to) 100%);
+}
+
+.bg-header-tint {
+  background: linear-gradient(135deg, var(--tint-1), var(--tint-2));
 }
