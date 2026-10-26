@@ -1,5 +1,6 @@
 "use client";
 
+import { useBranding } from "@/components/branding-provider";
 import Image from "next/image";
 import Link from "next/link";
 import { useMsal } from "@azure/msal-react";
@@ -8,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { AdminManager } from "@/components/admin-manager";
 import { UserManager } from "@/components/user-manager";
+import { AppearanceManager } from "@/components/appearance-manager";
 import { IndexHealth } from "@/components/index-health";
 import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
@@ -57,6 +59,7 @@ export default function SettingsPage() {
   }, []);
 
   const copy = getAppCopy(locale);
+  const brand = useBranding();
   const isArabic = locale === "ar";
   const authEnabled = isAuthEnabled();
   const BackIcon = isArabic ? ArrowRightIcon : ArrowLeftIcon;
@@ -65,19 +68,20 @@ export default function SettingsPage() {
   return (
     <main
       dir={isArabic ? "rtl" : "ltr"}
-      className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(38,53,139,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(205,170,72,0.18),_transparent_24%),linear-gradient(180deg,_#f6f4f0_0%,_#ece7de_100%)] px-4 py-5 text-slate-900 md:px-6"
+      className="min-h-screen bg-app px-4 py-5 text-slate-900 md:px-6"
     >
       <div className="mx-auto max-w-5xl">
         <div className="rounded-[1.75rem] border border-white/70 bg-white/70 shadow-[0_30px_90px_-45px_rgba(23,35,52,0.45)] backdrop-blur">
-          <header className="border-b border-slate-200/80 bg-[linear-gradient(135deg,_rgba(38,53,139,0.08),_rgba(205,170,72,0.14))] px-6 py-5">
+          <header className="border-b border-slate-200/80 bg-header-tint px-6 py-5">
             <div className={`flex flex-col gap-4 ${isArabic ? "text-right" : "text-left"} md:flex-row md:items-start md:justify-between`}>
               <div className="flex items-start gap-4">
                 <Image
-                  src={isArabic ? "/daleel-settings-ar.png" : "/daleel-settings-en.png"}
-                  alt="Daleel"
+                  src={brand.logos.settings ?? (isArabic ? "/daleel-settings-ar.png" : "/daleel-settings-en.png")}
+                  alt={brand.appName ?? "Daleel"}
                   width={3000}
                   height={850}
                   priority
+                  unoptimized={Boolean(brand.logos.settings)}
                   className="h-16 w-auto object-contain"
                 />
                 <div>
@@ -319,6 +323,7 @@ function PreferencesCard({
             <IndexHealth locale={locale} isArabic={isArabic} />
             <AdminManager locale={locale} isArabic={isArabic} />
             <UserManager locale={locale} isArabic={isArabic} />
+            <AppearanceManager locale={locale} isArabic={isArabic} />
           </div>
         </div>
       ) : null}

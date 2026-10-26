@@ -1,5 +1,6 @@
 "use client";
 
+import { useBranding } from "@/components/branding-provider";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   AssistantChatTransport,
@@ -696,7 +697,7 @@ export function LegalWorkspace({
       selectedLibraries={selectedLibraries}
       pendingProjectId={pendingProjectId}
     >
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(38,53,139,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(205,170,72,0.18),_transparent_24%),linear-gradient(180deg,_#f6f4f0_0%,_#ece7de_100%)] px-3 py-3 text-slate-900 md:px-4 md:py-4">
+      <main className="min-h-screen bg-app px-3 py-3 text-slate-900 md:px-4 md:py-4">
         <div
           dir="ltr"
           className="mx-auto flex h-[calc(100vh-1.5rem)] min-h-[calc(100vh-1.5rem)] w-full max-w-[1800px] overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/50 shadow-[0_30px_90px_-45px_rgba(23,35,52,0.45)] backdrop-blur"
@@ -809,7 +810,7 @@ function Workspace({
       dir={isArabic ? "rtl" : "ltr"}
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,_rgba(255,255,255,0.84),_rgba(244,241,235,0.96))]"
     >
-      <div className="border-b border-slate-200/80 bg-[linear-gradient(135deg,_rgba(38,53,139,0.08),_rgba(205,170,72,0.14))] px-6 py-5">
+      <div className="border-b border-slate-200/80 bg-header-tint px-6 py-5">
         <div className="flex items-start gap-3">
           <button
             type="button"
@@ -895,6 +896,7 @@ function PrimaryNav({
   isGlobalAdmin: boolean;
 }) {
   const copy = getAppCopy(locale);
+  const brand = useBranding();
   const ViewAllIcon = isArabic ? ChevronLeftIcon : ChevronRightIcon;
 
   return (
@@ -906,11 +908,12 @@ function PrimaryNav({
     >
       <div className="border-b border-sidebar-border px-5 py-4">
         <Image
-          src={isArabic ? "/daleel-logo-ar.png" : "/daleel-logo-en.png"}
-          alt="Daleel"
+          src={brand.logos.nav ?? (isArabic ? "/daleel-logo-ar.png" : "/daleel-logo-en.png")}
+          alt={brand.appName ?? "Daleel"}
           width={4000}
           height={1835}
           priority
+          unoptimized={Boolean(brand.logos.nav)}
           className="h-auto w-full object-contain"
         />
       </div>
@@ -1157,7 +1160,7 @@ function NavButton({
 }) {
   const className = `flex w-full items-center gap-3 rounded-2xl border px-4 py-2.5 transition ${
     primary
-      ? "border-[#dab74c] bg-[#dab74c] text-white hover:bg-[#dab74c]/90"
+      ? "border-(color:--nav-cta) bg-(color:--nav-cta) text-(color:--nav-cta-text) hover:opacity-90"
       : "border-sidebar-border bg-sidebar-accent/50 text-sidebar-foreground hover:border-sidebar-primary/30 hover:bg-sidebar-accent"
   } ${isArabic ? "flex-row-reverse text-right" : "text-left"}`;
 

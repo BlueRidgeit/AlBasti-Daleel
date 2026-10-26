@@ -202,7 +202,7 @@ const AssistantMessage: FC<{ locale: AppLocale }> = ({ locale }) => {
       data-role="assistant"
     >
       <div
-        className={`aui-assistant-message-content wrap-break-word rounded-[1.75rem] border border-white/70 bg-white/72 py-4 leading-relaxed text-foreground shadow-[0_28px_72px_-48px_rgba(15,23,42,0.55)] ${
+        className={`aui-assistant-message-content wrap-break-word rounded-[1.75rem] border border-white/70 bg-(color:--bubble-assistant) py-4 leading-relaxed text-foreground shadow-[0_28px_72px_-48px_rgba(15,23,42,0.55)] ${
           locale === "ar"
             ? "pr-6 pl-5 text-right"
             : "px-5 text-left"
@@ -287,7 +287,7 @@ const UserMessage: FC<{ locale: AppLocale }> = ({ locale }) => {
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div
-          className={`aui-user-message-content wrap-break-word peer rounded-[1.6rem] bg-primary py-2.5 text-primary-foreground shadow-[0_24px_64px_-42px_rgba(38,53,139,0.72)] empty:hidden ${
+          className={`aui-user-message-content wrap-break-word peer rounded-[1.6rem] bg-(color:--bubble-user) py-2.5 text-(color:--bubble-user-text) shadow-[0_24px_64px_-42px_rgba(38,53,139,0.72)] empty:hidden ${
             locale === "ar"
               ? "pr-5 pl-4 text-right"
               : "px-4 text-left"

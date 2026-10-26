@@ -402,7 +402,7 @@ function AccountBarInner({
   return (
     <div ref={ref} className="relative">
       {open ? (
-        <div className="absolute bottom-full mb-2 w-full overflow-hidden rounded-2xl border border-black/10 bg-[#dab74c] p-1 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]">
+        <div className="absolute bottom-full mb-2 w-full overflow-hidden rounded-2xl border border-black/10 bg-(color:--nav-cta) p-1 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)]">
           <button
             type="button"
             className={itemCls}
