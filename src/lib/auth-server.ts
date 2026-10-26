@@ -2,6 +2,7 @@ import { ConfidentialClientApplication } from "@azure/msal-node";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 import { env, hasServerAuthConfig } from "@/lib/env";
+import { resolveAccessRole, type AccessRole } from "@/lib/access";
 import { isAppAdmin } from "@/lib/app-admins";
 
 let confidentialClient: ConfidentialClientApplication | null = null;
@@ -159,6 +160,8 @@ export type AuthenticatedUser = {
   email?: string;
   objectId?: string;
   isGlobalAdmin?: boolean;
+  // Set by getAuthenticatedUserFromRequest: admin, user (allowed) or none (blocked by access control).
+  accessRole?: AccessRole;
 };
 
 export const mapAuthenticatedUser = (
@@ -181,7 +184,10 @@ export const mapAuthenticatedUser = (
   };
 };
 
-export async function getAuthenticatedUserFromRequest(request: Request) {
+export async function getAuthenticatedUserFromRequest(
+  request: Request,
+  options?: { includeBlocked?: boolean },
+) {
   const token = getRequestBearerToken(request);
 
   if (!token) {
@@ -197,6 +203,14 @@ export async function getAuthenticatedUserFromRequest(request: Request) {
   if (user && !user.isGlobalAdmin && user.email) {
     if (await isAppAdmin(user.email).catch(() => false)) {
       user.isGlobalAdmin = true;
+    }
+  }
+
+  if (user) {
+    // Optional access control (Postgres-backed user list). A no-op unless restriction is on.
+    user.accessRole = await resolveAccessRole(user).catch(() => "none" as AccessRole);
+    if (user.accessRole === "none" && !options?.includeBlocked) {
+      return undefined;
     }
   }
 

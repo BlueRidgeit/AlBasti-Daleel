@@ -1,3 +1,4 @@
+import { enforceAccess } from "@/lib/route-guard";
 import { createAzure } from "@ai-sdk/azure";
 import {
   convertToModelMessages,
@@ -78,6 +79,11 @@ const extractText = (message: UIMessage) =>
     .trim();
 
 export async function POST(request: Request) {
+  const accessDenied = await enforceAccess(request);
+  if (accessDenied) {
+    return accessDenied;
+  }
+
   if (!hasAzureOpenAIConfig) {
     return Response.json(
       {

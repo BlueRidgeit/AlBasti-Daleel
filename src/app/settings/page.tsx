@@ -7,6 +7,7 @@ import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LanguagesIcon, LogOutIcon, Sh
 import { useEffect, useState } from "react";
 
 import { AdminManager } from "@/components/admin-manager";
+import { UserManager } from "@/components/user-manager";
 import { IndexHealth } from "@/components/index-health";
 import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
@@ -317,6 +318,7 @@ function PreferencesCard({
             <LibraryManager locale={locale} isArabic={isArabic} variant="settings" />
             <IndexHealth locale={locale} isArabic={isArabic} />
             <AdminManager locale={locale} isArabic={isArabic} />
+            <UserManager locale={locale} isArabic={isArabic} />
           </div>
         </div>
       ) : null}

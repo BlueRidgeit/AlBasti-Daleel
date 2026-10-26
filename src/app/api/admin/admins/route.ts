@@ -1,7 +1,8 @@
-import { env, hasAzureCosmosConfig } from "@/lib/env";
+import { env } from "@/lib/env";
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-server";
 import {
   addAppAdmin,
+  appAdminsEnabled,
   listAppAdmins,
   removeAppAdmin,
 } from "@/lib/app-admins";
@@ -44,10 +45,10 @@ export async function GET(request: Request) {
     return denied;
   }
 
-  if (!hasAzureCosmosConfig) {
+  if (!appAdminsEnabled) {
     return Response.json(
       {
-        error: "Admin storage (Cosmos) is not configured.",
+        error: "Admin storage (Postgres or Cosmos) is not configured.",
         admins: [],
         envAdmins: env.adminUpns,
         me: user?.email ?? null,
@@ -71,9 +72,9 @@ export async function POST(request: Request) {
     return denied;
   }
 
-  if (!hasAzureCosmosConfig) {
+  if (!appAdminsEnabled) {
     return Response.json(
-      { error: "Admin storage (Cosmos) is not configured." },
+      { error: "Admin storage (Postgres or Cosmos) is not configured." },
       { status: 500 },
     );
   }
@@ -109,9 +110,9 @@ export async function DELETE(request: Request) {
     return denied;
   }
 
-  if (!hasAzureCosmosConfig) {
+  if (!appAdminsEnabled) {
     return Response.json(
-      { error: "Admin storage (Cosmos) is not configured." },
+      { error: "Admin storage (Postgres or Cosmos) is not configured." },
       { status: 500 },
     );
   }

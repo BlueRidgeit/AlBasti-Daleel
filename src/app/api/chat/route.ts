@@ -1,3 +1,4 @@
+import { enforceAccess } from "@/lib/route-guard";
 import { createAzure } from "@ai-sdk/azure";
 import { frontendTools } from "@assistant-ui/react-ai-sdk";
 import {
@@ -33,6 +34,11 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const accessDenied = await enforceAccess(req);
+  if (accessDenied) {
+    return accessDenied;
+  }
+
   const payload = await req.json();
   const {
     id,

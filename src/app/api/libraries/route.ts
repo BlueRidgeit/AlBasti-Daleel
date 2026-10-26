@@ -1,3 +1,4 @@
+import { enforceAccess } from "@/lib/route-guard";
 import { env, hasAzureSearchConfig } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -19,7 +20,12 @@ type FacetResponse = {
 // Lists the document libraries that currently have content in the index, with per-library
 // counts, so the search-filter UI can render checkboxes. Derived from the index itself
 // (a facet query), so it stays in sync without depending on the indexer's storage.
-export async function GET() {
+export async function GET(request: Request) {
+  const accessDenied = await enforceAccess(request);
+  if (accessDenied) {
+    return accessDenied;
+  }
+
   if (!hasAzureSearchConfig) {
     return Response.json({ libraries: [] });
   }
