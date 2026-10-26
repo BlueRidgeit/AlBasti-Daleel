@@ -5,7 +5,7 @@ import { Cairo, IBM_Plex_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { env } from "@/lib/env";
-import { defaultLocale } from "@/lib/i18n";
+import { getConfiguredLocale, getDefaultLocale, getPromptProfile, isGeneralProfile } from "@/lib/i18n";
 
 import "./globals.css";
 
@@ -20,15 +20,22 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-export const metadata: Metadata = {
-  title: "Daleel | Your AI Guide to Legal Intelligence",
-  description: "Daleel — your AI guide to legal intelligence.",
-  icons: {
-    icon: "/daleel-logo.png",
-    shortcut: "/daleel-logo.png",
-    apple: "/daleel-logo.png",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const general = isGeneralProfile();
+  return {
+    title: general
+      ? "Daleel | Your AI Guide to Company Documents"
+      : "Daleel | Your AI Guide to Legal Intelligence",
+    description: general
+      ? "Daleel — your AI guide to company documents."
+      : "Daleel — your AI guide to legal intelligence.",
+    icons: {
+      icon: "/daleel-logo.png",
+      shortcut: "/daleel-logo.png",
+      apple: "/daleel-logo.png",
+    },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +51,14 @@ export default async function RootLayout({
   const initialLocale =
     cookieLocale === "ar" || cookieLocale === "en"
       ? cookieLocale
-      : defaultLocale;
+      : getDefaultLocale();
   const runtimePublicEnv = {
     nextPublicAzureTenantId: env.nextPublicAzureTenantId,
     nextPublicAzureClientId: env.nextPublicAzureClientId,
     nextPublicAzureApiScope: env.nextPublicAzureApiScope,
     nextPublicAzureRedirectPath: env.nextPublicAzureRedirectPath,
+    defaultLocale: getConfiguredLocale(),
+    promptProfile: getPromptProfile(),
   };
 
   return (

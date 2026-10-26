@@ -12,7 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getApiAccessToken } from "@/lib/auth-browser";
-import { appCopy } from "@/lib/i18n";
+import { getAppCopy } from "@/lib/i18n";
 import type { AppLocale } from "@/lib/i18n";
 
 type AdminLibrary = {
@@ -32,7 +32,7 @@ export function LibraryManager({
   isArabic: boolean;
   variant?: "sidebar" | "settings";
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [open, setOpen] = useState(false);
   const [libraries, setLibraries] = useState<AdminLibrary[]>([]);
   const [loading, setLoading] = useState(false);

@@ -17,7 +17,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 
-import { appCopy, type AppLocale } from "@/lib/i18n";
+import { getAppCopy, type AppLocale } from "@/lib/i18n";
 
 export type ChatProject = { id: string; name: string };
 
@@ -59,7 +59,7 @@ export function ChatMenu({
   onCreateProjectWithChat: (id: string, name: string) => void;
   onMove: (id: string, direction: "up" | "down") => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [open, setOpen] = useState(false);
   const [projectPicker, setProjectPicker] = useState(false);
   const [newProject, setNewProject] = useState("");

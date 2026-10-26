@@ -41,7 +41,7 @@ import {
 } from "@/components/workspace-views";
 import { isAuthEnabled } from "@/lib/auth-client";
 import { getApiAccessToken } from "@/lib/auth-browser";
-import { appCopy, defaultLocale } from "@/lib/i18n";
+import { getAppCopy, getConfiguredLocale, getDefaultLocale } from "@/lib/i18n";
 import type { AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
@@ -117,6 +117,8 @@ const getInitialLocale = (fallback: AppLocale): AppLocale => {
   if (urlLocale === "ar" || urlLocale === "en") return urlLocale;
   const saved = window.localStorage.getItem(localeStorageKey);
   if (saved === "ar" || saved === "en") return saved;
+  // An explicit deployment default wins over browser-language guessing.
+  if (getConfiguredLocale()) return fallback;
   return window.navigator.language.toLowerCase().startsWith("ar") ? "ar" : fallback;
 };
 
@@ -151,7 +153,7 @@ const getResolvedThreadId = (activeThreadId?: string, runtimeThreadId?: string) 
 };
 
 export function LegalWorkspace({
-  initialLocale = defaultLocale,
+  initialLocale = getDefaultLocale(),
 }: {
   initialLocale?: AppLocale;
 }) {
@@ -301,7 +303,7 @@ export function LegalWorkspace({
     };
   }, [locale, localeHydrated]);
 
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const isArabic = locale === "ar";
 
   const pinnedChats = useMemo(() => allChats.filter((chat) => chat.pinned), [allChats]);
@@ -773,7 +775,7 @@ function Workspace({
   title: string;
   children: ReactNode;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const CollapseIcon = isArabic ? PanelRightCloseIcon : PanelLeftCloseIcon;
   const ExpandIcon = SidebarOpenIcon;
 
@@ -867,7 +869,7 @@ function PrimaryNav({
   onRenameSubmit: (id: string, title: string | null) => void;
   isGlobalAdmin: boolean;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const ViewAllIcon = isArabic ? ChevronLeftIcon : ChevronRightIcon;
 
   return (
@@ -999,7 +1001,7 @@ function SupportPanel({
   onAdvancedSearch: (criteria: QueryCriteria) => void;
   searchBusy: boolean;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <aside
@@ -1054,7 +1056,7 @@ function LibraryFilter({
   onToggle: (label: string) => void;
   onClear: () => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <section className="rounded-2xl border border-primary/10 bg-white/70 p-4">

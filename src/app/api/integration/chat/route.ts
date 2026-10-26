@@ -15,7 +15,7 @@ import {
   getRequestBearerToken,
 } from "@/lib/auth-server";
 import { logSessionEvent, persistChatThread } from "@/lib/chat-history";
-import { legalAgentSystemPrompt } from "@/lib/legal-agent";
+import { getSystemPrompt } from "@/lib/legal-agent";
 import {
   buildLanguageDirective,
   resolveConversationLanguage,
@@ -168,18 +168,24 @@ export async function POST(request: Request) {
   try {
     const result = await generateText({
       model,
-      system: `${legalAgentSystemPrompt}\n\n## Current Conversation Language\n${languageDirective}`,
+      system: `${getSystemPrompt(env.promptProfile)}\n\n## Current Conversation Language\n${languageDirective}`,
       messages: await convertToModelMessages(messages),
       stopWhen: stepCountIs(12),
       tools: {
         search_documents: tool({
           description:
-            "Search the indexed legal document repository and return matching files, cases, and source links.",
+            env.promptProfile === "file-finder"
+            ? "Search the indexed document repository and return matching files and source links."
+            : "Search the indexed legal document repository and return matching files, cases, and source links.",
           inputSchema: z.object({
             query: z
               .string()
               .min(1)
-              .describe("The user query to search for in the legal repository."),
+              .describe(
+              env.promptProfile === "file-finder"
+                ? "The user query to search for in the document repository."
+                : "The user query to search for in the legal repository.",
+            ),
             top: z
               .number()
               .int()

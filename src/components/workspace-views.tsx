@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { appCopy, type AppLocale } from "@/lib/i18n";
+import { getAppCopy, type AppLocale } from "@/lib/i18n";
 
 export type ChatEntry = {
   id: string;
@@ -261,7 +261,7 @@ export function AllChatsView({
   onRenameSubmit: (id: string, title: string | null) => void;
   onNewChat: () => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [query, setQuery] = useState("");
 
   const [selectionMode, setSelectionMode] = useState(false);
@@ -430,7 +430,7 @@ function ProjectModal({
   onOpenChange: (open: boolean) => void;
   onSubmit: (name: string, description: string) => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const editing = Boolean(initial);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -538,7 +538,7 @@ export function ProjectsView({
   onDeleteProject: (id: string, deleteChats: boolean) => void;
   onStartProjectChat: (projectId: string) => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<"updated" | "name" | "created">("updated");
   const [cardMenu, setCardMenu] = useState<
@@ -1023,7 +1023,7 @@ export function SearchResultsView({
   documents: SearchDoc[];
   busy: boolean;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <div

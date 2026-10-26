@@ -11,12 +11,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getLoginRequest, isAuthEnabled } from "@/lib/auth-client";
-import { appCopy, localeLabels, type AppLocale } from "@/lib/i18n";
+import { getAppCopy, localeLabels, type AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
 
 export function AuthStatus({ locale }: { locale: AppLocale }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -104,7 +104,7 @@ function AuthLockedState({
   setupPending?: boolean;
   loading?: boolean;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <div className="flex h-full min-h-0 items-center justify-center p-6 md:p-10">
@@ -178,7 +178,7 @@ function LoginLanguageToggle({
 
 function AuthenticatedStatus({ locale }: { locale: AppLocale }) {
   const { instance, accounts } = useMsal();
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const account = instance.getActiveAccount() ?? accounts[0];
   const router = useRouter();
   const isArabic = locale === "ar";
@@ -283,7 +283,7 @@ export function AccountBar({
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -313,7 +313,7 @@ function AccountBarInner({
   setLocale: (locale: AppLocale) => void;
 }) {
   const { instance, accounts } = useMsal();
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const isArabic = locale === "ar";
   const router = useRouter();
   const account = instance.getActiveAccount() ?? accounts[0];
@@ -497,7 +497,7 @@ export function SignInButton({
   className?: string;
 }) {
   const { instance } = useMsal();
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   const handleSignIn = async () => {
     const loginRequest = getLoginRequest();
