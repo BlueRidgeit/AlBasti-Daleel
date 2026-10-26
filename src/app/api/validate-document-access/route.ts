@@ -1,3 +1,4 @@
+import { enforceAccess } from "@/lib/route-guard";
 import { z } from "zod";
 
 import { validateDocumentAccess } from "@/lib/read-document";
@@ -13,6 +14,11 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const accessDenied = await enforceAccess(request);
+  if (accessDenied) {
+    return accessDenied;
+  }
+
   const payload = requestSchema.parse(await request.json());
   const apiAccessToken = getRequestBearerToken(request);
   let graphAccessToken: string | undefined;

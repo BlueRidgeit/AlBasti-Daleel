@@ -1,6 +1,7 @@
 import { CosmosClient, type Container } from "@azure/cosmos";
 
-import { env, hasAzureCosmosConfig } from "@/lib/env";
+import { query } from "@/lib/db";
+import { env, hasAzureCosmosConfig, hasDatabaseConfig } from "@/lib/env";
 
 // A UI-managed app-admin. These users get the same admin capabilities as tenant Global
 // Administrators, but WITHOUT holding any tenant directory role — the grant lives only in
@@ -20,7 +21,8 @@ type AppAdminDocument = AppAdmin & {
 const PARTITION = "admin";
 const CACHE_TTL_MS = 60_000;
 
-export const appAdminsEnabled = hasAzureCosmosConfig;
+// The opt-in Postgres store (DALEEL_DATABASE_URL) takes precedence over Cosmos.
+export const appAdminsEnabled = hasDatabaseConfig || hasAzureCosmosConfig;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -75,7 +77,28 @@ const toAppAdmin = (doc: AppAdminDocument): AppAdmin => ({
   addedAt: doc.addedAt,
 });
 
+type AdminRow = {
+  email: string;
+  display_name: string | null;
+  added_by: string | null;
+  added_at: Date | string;
+};
+
+const fromRow = (row: AdminRow): AppAdmin => ({
+  email: row.email,
+  displayName: row.display_name ?? undefined,
+  addedBy: row.added_by ?? undefined,
+  addedAt: new Date(row.added_at).toISOString(),
+});
+
 export async function listAppAdmins(): Promise<AppAdmin[]> {
+  if (hasDatabaseConfig) {
+    const rows = await query<AdminRow>(
+      "SELECT email, display_name, added_by, added_at FROM app_admins ORDER BY lower(email)",
+    );
+    return rows.map(fromRow);
+  }
+
   const container = await ensureContainer();
   if (!container) {
     return [];
@@ -99,7 +122,7 @@ export async function listAppAdmins(): Promise<AppAdmin[]> {
 // True if the given signed-in email has been granted app-admin via the Cosmos list.
 // Fails closed (returns false) on any transient Cosmos error so a lookup blip never crashes auth.
 export async function isAppAdmin(email: string): Promise<boolean> {
-  if (!hasAzureCosmosConfig) {
+  if (!appAdminsEnabled) {
     return false;
   }
 
@@ -130,6 +153,24 @@ export async function addAppAdmin(args: {
   displayName?: string;
   addedBy?: string;
 }): Promise<AppAdmin | null> {
+  if (hasDatabaseConfig) {
+    const email = args.email.trim();
+    const normalized = normalizeEmail(email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      return null;
+    }
+    // Stored lowercased so lookups are case-insensitive; display name is kept separately.
+    const rows = await query<AdminRow>(
+      `INSERT INTO app_admins (email, display_name, added_by, added_at)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name
+       RETURNING email, display_name, added_by, added_at`,
+      [normalized, args.displayName?.trim() || null, args.addedBy ?? null],
+    );
+    cache = null;
+    return fromRow(rows[0]);
+  }
+
   const container = await ensureContainer();
   if (!container) {
     return null;
@@ -157,6 +198,19 @@ export async function addAppAdmin(args: {
 }
 
 export async function removeAppAdmin(email: string): Promise<boolean> {
+  if (hasDatabaseConfig) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) {
+      return false;
+    }
+    const rows = await query<{ email: string }>(
+      "DELETE FROM app_admins WHERE email = $1 RETURNING email",
+      [normalized],
+    );
+    cache = null;
+    return rows.length > 0;
+  }
+
   const container = await ensureContainer();
   if (!container) {
     return false;

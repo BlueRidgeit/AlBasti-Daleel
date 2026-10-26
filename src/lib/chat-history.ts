@@ -1,7 +1,8 @@
-import { CosmosClient, type Container } from "@azure/cosmos";
+import { CosmosClient } from "@azure/cosmos";
 import type { UIMessage } from "ai";
 
-import { env, hasAzureCosmosConfig } from "@/lib/env";
+import { cosmosDocStore, postgresDocStore, type DocStore } from "@/lib/doc-store";
+import { env, hasAzureCosmosConfig, hasDatabaseConfig } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n";
 
 export type StoredMessage = {
@@ -83,8 +84,8 @@ export type RestoredThread = {
 
 let cosmosClient: CosmosClient | null = null;
 let resourcePromise: Promise<{
-  threads: Container;
-  sessions: Container;
+  threads: DocStore;
+  sessions: DocStore;
 }> | null = null;
 
 const getCosmosClient = () => {
@@ -102,7 +103,17 @@ const getCosmosClient = () => {
   return cosmosClient;
 };
 
+const postgresStores = {
+  threads: postgresDocStore("threads"),
+  sessions: postgresDocStore("sessions"),
+};
+
 const ensureContainers = async () => {
+  // Opt-in Postgres store wins when DALEEL_DATABASE_URL is set.
+  if (hasDatabaseConfig) {
+    return postgresStores;
+  }
+
   if (!hasAzureCosmosConfig) {
     return null;
   }
@@ -131,7 +142,7 @@ const ensureContainers = async () => {
           },
         });
 
-      return { threads, sessions };
+      return { threads: cosmosDocStore(threads), sessions: cosmosDocStore(sessions) };
     })();
   }
 
@@ -239,7 +250,7 @@ const getLocalizedBucket = (date: Date, locale: AppLocale) => {
   return locale === "ar" ? "منذ فترة طويلة" : "Long time ago";
 };
 
-export const historyStorageEnabled = hasAzureCosmosConfig;
+export const historyStorageEnabled = hasAzureCosmosConfig || hasDatabaseConfig;
 
 export async function persistChatThread(args: {
   userId: string;
@@ -256,8 +267,7 @@ export async function persistChatThread(args: {
 
   const { threads } = resources;
   const storedMessages = toStoredMessages(args.messages, args.assistantText);
-  const existing = await threads.item(args.threadId, args.userId).read<ThreadDocument>().catch(() => undefined);
-  const prev = existing?.resource;
+  const prev = await threads.read<ThreadDocument>(args.threadId, args.userId);
   const createdAt = prev?.createdAt ?? new Date().toISOString();
   const updatedAt = new Date().toISOString();
 
@@ -281,7 +291,7 @@ export async function persistChatThread(args: {
     messages: storedMessages,
   };
 
-  await threads.items.upsert(document);
+  await threads.upsert(document, args.userId);
 }
 
 // Read a thread doc, apply a change, upsert it. Returns false if the thread is missing.
@@ -295,16 +305,13 @@ async function patchThread(
     return false;
   }
 
-  const existing = await resources.threads
-    .item(threadId, userId)
-    .read<ThreadDocument>()
-    .catch(() => undefined);
+  const existing = await resources.threads.read<ThreadDocument>(threadId, userId);
 
-  if (!existing?.resource) {
+  if (!existing) {
     return false;
   }
 
-  await resources.threads.items.upsert(apply(existing.resource));
+  await resources.threads.upsert(apply(existing), userId);
   return true;
 }
 
@@ -387,7 +394,7 @@ export async function logSessionEvent(args: {
     createdAt: new Date().toISOString(),
   };
 
-  await resources.sessions.items.create(document);
+  await resources.sessions.upsert(document, args.userId);
 }
 
 async function queryThreadDocumentsForUser(userId: string) {
@@ -396,19 +403,7 @@ async function queryThreadDocumentsForUser(userId: string) {
     return [] satisfies ThreadDocument[];
   }
 
-  const result = await resources.threads.items
-    .query<ThreadDocument>(
-      {
-        query: "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'thread'",
-        parameters: [{ name: "@userId", value: userId }],
-      },
-      {
-        partitionKey: userId,
-      },
-    )
-    .fetchAll();
-
-  return result.resources;
+  return resources.threads.list<ThreadDocument>(userId, "thread");
 }
 
 const toRestoredThread = (thread: ThreadDocument) =>
@@ -506,7 +501,7 @@ export async function deleteThreadById(args: {
     return false;
   }
 
-  await resources.threads.item(args.threadId, args.userId).delete();
+  await resources.threads.remove(args.threadId, args.userId);
   return true;
 }
 
@@ -528,17 +523,9 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
     return [];
   }
 
-  const result = await resources.threads.items
-    .query<ProjectDocument>(
-      {
-        query: "SELECT * FROM c WHERE c.userId = @userId AND c.type = 'project'",
-        parameters: [{ name: "@userId", value: userId }],
-      },
-      { partitionKey: userId },
-    )
-    .fetchAll();
+  const projects = await resources.threads.list<ProjectDocument>(userId, "project");
 
-  return result.resources
+  return projects
     .map(toProjectSummary)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -570,7 +557,7 @@ export async function createProject(
     updatedAt: now,
   };
 
-  await resources.threads.items.upsert(doc);
+  await resources.threads.upsert(doc, userId);
   return toProjectSummary(doc);
 }
 
@@ -584,17 +571,14 @@ export async function updateProject(
     return false;
   }
 
-  const existing = await resources.threads
-    .item(projectId, userId)
-    .read<ProjectDocument>()
-    .catch(() => undefined);
+  const existing = await resources.threads.read<ProjectDocument>(projectId, userId);
 
-  if (!existing?.resource || existing.resource.type !== "project") {
+  if (!existing || existing.type !== "project") {
     return false;
   }
 
   const next: ProjectDocument = {
-    ...existing.resource,
+    ...existing,
     updatedAt: new Date().toISOString(),
   };
   if (fields.name?.trim()) {
@@ -609,7 +593,7 @@ export async function updateProject(
     }
   }
 
-  await resources.threads.items.upsert(next);
+  await resources.threads.upsert(next, userId);
   return true;
 }
 
@@ -623,12 +607,9 @@ export async function deleteProject(
     return false;
   }
 
-  const existing = await resources.threads
-    .item(projectId, userId)
-    .read<ProjectDocument>()
-    .catch(() => undefined);
+  const existing = await resources.threads.read<ProjectDocument>(projectId, userId);
 
-  if (!existing?.resource || existing.resource.type !== "project") {
+  if (!existing || existing.type !== "project") {
     return false;
   }
 
@@ -639,14 +620,14 @@ export async function deleteProject(
       continue;
     }
     if (deleteChats) {
-      await resources.threads.item(thread.id, userId).delete().catch(() => {});
+      await resources.threads.remove(thread.id, userId).catch(() => {});
     } else {
       const next = { ...thread };
       delete next.projectId;
-      await resources.threads.items.upsert(next);
+      await resources.threads.upsert(next, userId);
     }
   }
 
-  await resources.threads.item(projectId, userId).delete();
+  await resources.threads.remove(projectId, userId);
   return true;
 }

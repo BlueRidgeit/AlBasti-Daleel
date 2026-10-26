@@ -104,6 +104,11 @@ export const env = {
   // Opt-in prompt profile. Unset (the default) keeps the original behaviour; "file-finder"
   // adds the find-files / latest-version rules to the system prompt.
   promptProfile: trimToUndefined(process.env.DALEEL_PROMPT_PROFILE)?.toLowerCase(),
+  // Opt-in Postgres store (chat history, app admins/users, branding settings, logos). When set it
+  // takes precedence over Cosmos. Unset keeps the original Cosmos-or-nothing behaviour.
+  databaseUrl: trimToUndefined(process.env.DALEEL_DATABASE_URL),
+  // Force "only listed users" access control on, regardless of the Settings toggle.
+  restrictAccess: process.env.DALEEL_RESTRICT_ACCESS?.trim().toLowerCase() === "true",
   azureWebSearchCountry:
     trimToUndefined(process.env.AZURE_WEB_SEARCH_COUNTRY) ?? "AE",
   azureWebSearchContextSize:
@@ -140,6 +145,8 @@ export const hasAzureCosmosConfig = Boolean(
     env.azureCosmosThreadsContainer &&
     env.azureCosmosSessionsContainer,
 );
+
+export const hasDatabaseConfig = Boolean(env.databaseUrl);
 
 export const hasAzureWebSearchConfig = Boolean(
   env.azureOpenAIApiKey &&

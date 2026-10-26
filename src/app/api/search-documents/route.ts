@@ -1,3 +1,4 @@
+import { enforceAccess } from "@/lib/route-guard";
 import { z } from "zod";
 
 import { searchDocuments } from "@/lib/search-documents";
@@ -10,6 +11,11 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const accessDenied = await enforceAccess(request);
+  if (accessDenied) {
+    return accessDenied;
+  }
+
   const payload = requestSchema.parse(await request.json());
   const result = await searchDocuments(payload.query, { top: payload.top });
 

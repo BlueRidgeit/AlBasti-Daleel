@@ -171,6 +171,8 @@ export function LegalWorkspace({
     getInitialSelectedLibraries,
   );
   const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
+  // False when access control is on and the signed-in account has not been granted access.
+  const [accessAllowed, setAccessAllowed] = useState(true);
   const [view, setView] = useState<View>("chat");
   const [searchDocs, setSearchDocs] = useState<SearchDoc[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
@@ -230,8 +232,11 @@ export function LegalWorkspace({
         headers: { Authorization: `Bearer ${accessToken}` },
       }).catch(() => undefined);
       if (!response?.ok) return;
-      const data = (await response.json()) as { isGlobalAdmin?: boolean };
-      if (!cancelled) setIsGlobalAdmin(Boolean(data?.isGlobalAdmin));
+      const data = (await response.json()) as { isGlobalAdmin?: boolean; allowed?: boolean };
+      if (!cancelled) {
+        setIsGlobalAdmin(Boolean(data?.isGlobalAdmin));
+        setAccessAllowed(data?.allowed !== false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -661,6 +666,26 @@ export function LegalWorkspace({
       {mainContent}
     </Workspace>
   );
+
+  if (!accessAllowed) {
+    return (
+      <main
+        dir={isArabic ? "rtl" : "ltr"}
+        className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-slate-900"
+      >
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-xl font-semibold">
+            {isArabic ? "لم يتم منح حسابك صلاحية الوصول" : "Your account has not been granted access"}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            {isArabic
+              ? "تواصل مع مسؤول دليل ليضيف حسابك إلى قائمة المستخدمين المسموح لهم."
+              : "Ask a Daleel administrator to add your account to the list of permitted users."}
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <ChatRuntimeShell
