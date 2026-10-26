@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getApiAccessToken } from "@/lib/auth-browser";
+import { describeInvite, resendInvite, type InviteResult } from "@/lib/invite-client";
 import type { AppLocale } from "@/lib/i18n";
 
 type AppUser = {
@@ -40,6 +41,8 @@ export function UserManager({
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sendInvite, setSendInvite] = useState(true);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const authHeaders = async (): Promise<Record<string, string>> => {
     const token = await getApiAccessToken().catch(() => undefined);
@@ -85,12 +88,16 @@ export function UserManager({
     if (!trimmed) return;
     setBusy("__add");
     setError(null);
+    setNotice(null);
     try {
       const data = await call("POST", {
         email: trimmed,
         displayName: displayName.trim() || undefined,
+        sendInvite,
       });
       const added = data.user as AppUser;
+      const outcome = describeInvite(isArabic, data.invite as InviteResult | undefined, added.email);
+      setNotice(outcome.text ? outcome : null);
       setUsers((current) =>
         [...current.filter((u) => u.email.toLowerCase() !== added.email.toLowerCase()), added].sort(
           (a, b) => a.email.localeCompare(b.email),
@@ -100,6 +107,25 @@ export function UserManager({
       setDisplayName("");
     } catch (err) {
       fail(err, t(isArabic, "تعذّرت الإضافة.", "Could not add user."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const resend = async (user: AppUser) => {
+    setBusy(`resend:${user.email}`);
+    setError(null);
+    setNotice(null);
+    try {
+      const invite = await resendInvite({ email: user.email, displayName: user.displayName, role: "user" });
+      const outcome = describeInvite(isArabic, invite, user.email);
+      setNotice(
+        invite.status === "not_configured" || invite.status === "failed"
+          ? { ok: false, text: outcome.text.replace(/^(تمت الإضافة، لكن |Added, but )/, "") }
+          : outcome,
+      );
+    } catch (err) {
+      fail(err, t(isArabic, "تعذّر إرسال الدعوة.", "Could not send the invitation."));
     } finally {
       setBusy(null);
     }
@@ -258,7 +284,22 @@ export function UserManager({
               </div>
             </div>
 
+            <label className={`flex items-center gap-2 text-xs text-slate-600 ${isArabic ? "flex-row-reverse" : ""}`}>
+              <input
+                type="checkbox"
+                checked={sendInvite}
+                onChange={(event) => setSendInvite(event.target.checked)}
+                className="size-3.5 accent-primary"
+              />
+              {t(isArabic, "إرسال دعوة بالبريد الإلكتروني", "Send an invitation email")}
+            </label>
+
             {error ? <p className="text-center text-sm text-red-600">{error}</p> : null}
+            {notice ? (
+              <p className={`text-center text-sm ${notice.ok ? "text-emerald-700" : "text-amber-700"}`}>
+                {notice.text}
+              </p>
+            ) : null}
 
             <div className="max-h-[34vh] overflow-y-auto">
               {loading ? (
@@ -291,6 +332,15 @@ export function UserManager({
                           {user.email}
                         </span>
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => void resend(user)}
+                        disabled={busy === `resend:${user.email}`}
+                        title={t(isArabic, "إعادة إرسال الدعوة", "Resend invitation")}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/5 disabled:opacity-60"
+                      >
+                        {busy === `resend:${user.email}` ? "…" : t(isArabic, "إعادة الدعوة", "Resend")}
+                      </button>
                       <button
                         type="button"
                         onClick={() => void remove(user)}

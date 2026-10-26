@@ -1,4 +1,5 @@
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-server";
+import { sendInvitation } from "@/lib/invite-email";
 import {
   accessControlAvailable,
   addAppUser,
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => undefined)) as
-    | { email?: string; displayName?: string }
+    | { email?: string; displayName?: string; sendInvite?: boolean }
     | undefined;
   const email = body?.email?.trim();
   if (!email) {
@@ -84,7 +85,17 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  return Response.json({ ok: true, user: added });
+  const invite =
+    body?.sendInvite === false
+      ? { status: "skipped" as const }
+      : await sendInvitation({
+          request,
+          to: added.email,
+          displayName: added.displayName,
+          role: "user",
+          invitedBy: user?.displayName ?? user?.email,
+        });
+  return Response.json({ ok: true, user: added, invite });
 }
 
 // Turn "only listed users" access control on or off.
