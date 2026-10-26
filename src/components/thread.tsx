@@ -8,7 +8,7 @@ import { SearchSourcesToolUI } from "@/components/search-sources-tool-ui";
 import { ToolFallback } from "@/components/tool-fallback";
 import { TooltipIconButton } from "@/components/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
-import { appCopy } from "@/lib/i18n";
+import { getAppCopy } from "@/lib/i18n";
 import type { AppLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -38,7 +38,7 @@ import {
 import type { FC } from "react";
 
 export const Thread: FC<{ locale: AppLocale }> = ({ locale }) => {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const isArabic = locale === "ar";
 
   return (
@@ -97,7 +97,7 @@ const ThreadScrollToBottom: FC<{ label: string }> = ({ label }) => {
 };
 
 const ThreadWelcome: FC<{ locale: AppLocale }> = ({ locale }) => {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <div className="aui-thread-welcome-root mx-auto my-auto flex w-full max-w-(--thread-max-width) grow flex-col">
@@ -119,7 +119,7 @@ const ThreadWelcome: FC<{ locale: AppLocale }> = ({ locale }) => {
 };
 
 const Composer: FC<{ locale: AppLocale }> = ({ locale }) => {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
@@ -148,7 +148,7 @@ const Composer: FC<{ locale: AppLocale }> = ({ locale }) => {
 };
 
 const ComposerAction: FC<{ locale: AppLocale }> = ({ locale }) => {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">

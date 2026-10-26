@@ -11,21 +11,21 @@ import { IndexHealth } from "@/components/index-health";
 import { LibraryManager } from "@/components/library-manager";
 import { isAuthEnabled } from "@/lib/auth-client";
 import { getApiAccessToken } from "@/lib/auth-browser";
-import { appCopy, defaultLocale, localeLabels, type AppLocale } from "@/lib/i18n";
+import { getAppCopy, getDefaultLocale, localeLabels, type AppLocale } from "@/lib/i18n";
 
 const localeStorageKey = "albasti-search-chat-locale";
 
 const getStoredLocale = (): AppLocale => {
   if (typeof window === "undefined") {
-    return defaultLocale;
+    return getDefaultLocale();
   }
 
   const saved = window.localStorage.getItem(localeStorageKey);
-  return saved === "en" || saved === "ar" ? saved : defaultLocale;
+  return saved === "en" || saved === "ar" ? saved : getDefaultLocale();
 };
 
 export default function SettingsPage() {
-  const [locale, setLocale] = useState<AppLocale>(defaultLocale);
+  const [locale, setLocale] = useState<AppLocale>(getDefaultLocale);
   const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function SettingsPage() {
     };
   }, []);
 
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const isArabic = locale === "ar";
   const authEnabled = isAuthEnabled();
   const BackIcon = isArabic ? ArrowRightIcon : ArrowLeftIcon;
@@ -120,7 +120,7 @@ export default function SettingsPage() {
 
 function AccountCard({ locale }: { locale: AppLocale }) {
   const { instance, accounts } = useMsal();
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const account = instance.getActiveAccount() ?? accounts[0];
   const isArabic = locale === "ar";
   const authEnabled = isAuthEnabled();

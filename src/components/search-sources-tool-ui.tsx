@@ -8,7 +8,7 @@ import {
   SearchIcon,
 } from "lucide-react";
 
-import { appCopy, type AppLocale } from "@/lib/i18n";
+import { getAppCopy, type AppLocale } from "@/lib/i18n";
 
 type SourceDoc = {
   itemId: string;
@@ -26,7 +26,7 @@ type SearchResult = {
 // answers show a clean "Sources" strip (Open in SharePoint + Open folder per cited file)
 // instead of the generic raw-JSON tool fallback. Returns null — it only registers.
 export function SearchSourcesToolUI({ locale }: { locale: AppLocale }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const isArabic = locale === "ar";
 
   useAssistantToolUI({

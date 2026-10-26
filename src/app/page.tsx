@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 import { LegalWorkspace } from "@/components/legal-workspace";
-import { defaultLocale, type AppLocale } from "@/lib/i18n";
+import { getDefaultLocale, type AppLocale } from "@/lib/i18n";
 
 const localeCookieName = "albasti-search-chat-locale";
 
@@ -11,7 +11,7 @@ export default async function Home() {
   const initialLocale: AppLocale =
     cookieLocale === "ar" || cookieLocale === "en"
       ? cookieLocale
-      : defaultLocale;
+      : getDefaultLocale();
 
   return <LegalWorkspace initialLocale={initialLocale} />;
 }

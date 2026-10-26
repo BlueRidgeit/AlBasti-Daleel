@@ -108,7 +108,7 @@ export async function searchPublicWeb(args: {
           content: [
             {
               type: "input_text",
-              text: `You are a research helper for a legal assistant app. Search the public web and return concise factual notes in ${languageLabel}. Focus on trustworthy public sources and keep the result compact. Do not mention internal repositories or SharePoint. Preserve source fidelity because the caller will show citations separately.`,
+              text: `You are a research helper for ${env.promptProfile === "file-finder" ? "a company document assistant app" : "a legal assistant app"}. Search the public web and return concise factual notes in ${languageLabel}. Focus on trustworthy public sources and keep the result compact. Do not mention internal repositories or SharePoint. Preserve source fidelity because the caller will show citations separately.`,
             },
           ],
         },

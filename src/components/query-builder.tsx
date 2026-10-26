@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDownIcon, SearchIcon } from "lucide-react";
 
-import { appCopy, type AppLocale } from "@/lib/i18n";
+import { getAppCopy, type AppLocale } from "@/lib/i18n";
 
 export type QueryCriteria = {
   allWords: string;
@@ -42,7 +42,7 @@ export function QueryBuilder({
   busy: boolean;
   onSearch: (criteria: QueryCriteria) => void;
 }) {
-  const copy = appCopy[locale];
+  const copy = getAppCopy(locale);
   const [open, setOpen] = useState(false);
   const [criteria, setCriteria] = useState<QueryCriteria>(EMPTY);
 

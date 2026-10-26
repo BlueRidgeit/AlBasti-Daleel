@@ -1,6 +1,22 @@
 export type AppLocale = "ar" | "en";
 
-export const defaultLocale: AppLocale = "ar";
+const builtInDefaultLocale: AppLocale = "ar";
+
+// Optional deployment-level default (DALEEL_DEFAULT_LOCALE=en|ar). Server reads the env var;
+// the browser reads the copy the root layout injects into window.__ALBASTI_PUBLIC_ENV__.
+// Unset keeps the original behaviour (Arabic, or the browser language when it is Arabic).
+export const getConfiguredLocale = (): AppLocale | undefined => {
+  const raw =
+    typeof window === "undefined"
+      ? process.env.DALEEL_DEFAULT_LOCALE
+      : (window as unknown as { __ALBASTI_PUBLIC_ENV__?: { defaultLocale?: string } })
+          .__ALBASTI_PUBLIC_ENV__?.defaultLocale;
+  const value = raw?.trim().toLowerCase();
+  return value === "en" || value === "ar" ? value : undefined;
+};
+
+export const getDefaultLocale = (): AppLocale =>
+  getConfiguredLocale() ?? builtInDefaultLocale;
 
 export const localeLabels: Record<AppLocale, string> = {
   ar: "العربية",
@@ -365,3 +381,89 @@ export const appCopy = {
     adminLibrariesRemoveConfirm: "Remove this library from search and delete its indexed content?",
   },
 } as const;
+
+// Deployment-level prompt/copy profile (DALEEL_PROMPT_PROFILE). "file-finder" is the general
+// business-documents profile: neutral wording and no legal framing. Unset keeps the original
+// legal wording. Server reads the env var; the browser reads the copy the root layout injects.
+export const getPromptProfile = (): string | undefined => {
+  const raw =
+    typeof window === "undefined"
+      ? process.env.DALEEL_PROMPT_PROFILE
+      : (window as unknown as { __ALBASTI_PUBLIC_ENV__?: { promptProfile?: string } })
+          .__ALBASTI_PUBLIC_ENV__?.promptProfile;
+  return raw?.trim().toLowerCase() || undefined;
+};
+
+export const isGeneralProfile = () => getPromptProfile() === "file-finder";
+
+const generalCopyOverrides = {
+  ar: {
+    badge: "البحث الذكي في المستندات",
+    tagline: "دليلك الذكي إلى مستندات المؤسسة.",
+    description:
+      "ابحث في مكتبات المستندات المفهرسة بسرعة، ثم انتقل إلى قراءة أعمق للملف عندما تحتاج إلى التفاصيل.",
+    cards: [
+      {
+        title: "البحث في المكتبات",
+        description:
+          "يعتمد على Azure AI Search للوصول السريع إلى المستندات المفهرسة من مكتبات SharePoint.",
+      },
+      {
+        title: "قراءة المستند",
+        description:
+          "يستخدم أداة قراءة مخصصة للتحليل الأعمق على مستوى الملف.",
+      },
+      {
+        title: "نموذج الأمان",
+        description:
+          "مصمم ليتكامل مع Entra وتفويض SharePoint وفق صلاحيات كل مستخدم.",
+      },
+    ],
+    workspaceTitle: "مساحة البحث في المستندات",
+    workspaceDescription:
+      "يفصل بين العربية والإنجليزية، ويعيد روابط المستندات الأصلية عند توفرها، ويستخدم هويتك للوصول إلى ملفات SharePoint.",
+    composerPlaceholder: "اسأل عن مستند أو عرض أو مشروع...",
+    welcomeBadge: "مساعد مستندات موثّق",
+    welcomeTitle: "ابدأ من ملف أو مشروع أو سؤال.",
+    welcomeDescription:
+      "تبدأ هذه المساحة بالبحث في مكتبات المستندات، ثم تنتقل إلى قراءة ملف محدد عند الحاجة إلى مراجعة أعمق.",
+  },
+  en: {
+    badge: "AI Document Search",
+    tagline: "Your AI guide to company documents.",
+    description:
+      "Search the indexed document libraries quickly, then dive into a specific file when you need the details.",
+    cards: [
+      {
+        title: "Library search",
+        description:
+          "Uses Azure AI Search for fast retrieval across the indexed SharePoint libraries.",
+      },
+      {
+        title: "Document reading",
+        description:
+          "Calls a dedicated read tool for deeper file-level analysis.",
+      },
+      {
+        title: "Security model",
+        description:
+          "Designed for Entra sign-in and SharePoint access that follows each user's own permissions.",
+      },
+    ],
+    workspaceTitle: "Document search workspace",
+    workspaceDescription:
+      "The assistant keeps Arabic and English separate, returns original document links when available, and uses your identity for SharePoint access.",
+    composerPlaceholder: "Ask about a document, proposal, or project...",
+    welcomeBadge: "Grounded document assistant",
+    welcomeTitle: "Start with a file, project, or question.",
+    welcomeDescription:
+      "This workspace searches the document libraries first, then drills into a specific file when deeper review is needed.",
+    lockedDescription:
+      "The workspace must know who is signed in before it can read SharePoint files securely and apply your document permissions.",
+  },
+} as const;
+
+export const getAppCopy = (locale: AppLocale): (typeof appCopy)[AppLocale] =>
+  (isGeneralProfile()
+    ? { ...appCopy[locale], ...generalCopyOverrides[locale] }
+    : appCopy[locale]) as unknown as (typeof appCopy)[AppLocale];
