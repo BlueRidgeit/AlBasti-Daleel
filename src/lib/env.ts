@@ -109,6 +109,16 @@ export const env = {
   databaseUrl: trimToUndefined(process.env.DALEEL_DATABASE_URL),
   // Force "only listed users" access control on, regardless of the Settings toggle.
   restrictAccess: process.env.DALEEL_RESTRICT_ACCESS?.trim().toLowerCase() === "true",
+  // Invitation e-mail (opt-in): sent through Microsoft Graph as MAIL_FROM using an app registration
+  // that has the Mail.Send application permission. Unset = users are added without an e-mail.
+  mailTenantId:
+    trimToUndefined(process.env.MAIL_TENANT_ID) ??
+    trimToUndefined(process.env.AZURE_ENTRA_TENANT_ID),
+  mailClientId: trimToUndefined(process.env.MAIL_CLIENT_ID),
+  mailClientSecret: trimToUndefined(process.env.MAIL_CLIENT_SECRET),
+  mailFrom: trimToUndefined(process.env.MAIL_FROM),
+  // Public address used in invitation links, e.g. https://daleel.blueridgeit.com
+  appBaseUrl: trimToUndefined(process.env.APP_BASE_URL)?.replace(/\/$/, ""),
   azureWebSearchCountry:
     trimToUndefined(process.env.AZURE_WEB_SEARCH_COUNTRY) ?? "AE",
   azureWebSearchContextSize:
@@ -147,6 +157,10 @@ export const hasAzureCosmosConfig = Boolean(
 );
 
 export const hasDatabaseConfig = Boolean(env.databaseUrl);
+
+export const hasMailConfig = Boolean(
+  env.mailTenantId && env.mailClientId && env.mailClientSecret && env.mailFrom,
+);
 
 export const hasAzureWebSearchConfig = Boolean(
   env.azureOpenAIApiKey &&

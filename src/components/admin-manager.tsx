@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getApiAccessToken } from "@/lib/auth-browser";
+import { describeInvite, resendInvite, type InviteResult } from "@/lib/invite-client";
 import type { AppLocale } from "@/lib/i18n";
 
 type AppAdmin = {
@@ -39,6 +40,8 @@ export function AdminManager({
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sendInvite, setSendInvite] = useState(true);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -78,6 +81,7 @@ export function AdminManager({
     }
     setAdding(true);
     setError(null);
+    setNotice(null);
     try {
       const token = await getApiAccessToken().catch(() => undefined);
       const response = await fetch("/api/admin/admins", {
@@ -89,10 +93,12 @@ export function AdminManager({
         body: JSON.stringify({
           email: trimmed,
           displayName: displayName.trim() || undefined,
+          sendInvite,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as {
         admin?: AppAdmin;
+        invite?: InviteResult;
         error?: string;
       };
       if (!response.ok || !data.admin) {
@@ -105,6 +111,8 @@ export function AdminManager({
         next.push(data.admin!);
         return next.sort((a, b) => a.email.localeCompare(b.email));
       });
+      const outcome = describeInvite(isArabic, data.invite, data.admin.email);
+      setNotice(outcome.text ? outcome : null);
       setEmail("");
       setDisplayName("");
     } catch (err) {
@@ -115,6 +123,29 @@ export function AdminManager({
       );
     } finally {
       setAdding(false);
+    }
+  };
+
+  const resend = async (admin: AppAdmin) => {
+    setBusyEmail(`resend:${admin.email}`);
+    setError(null);
+    setNotice(null);
+    try {
+      const invite = await resendInvite({ email: admin.email, displayName: admin.displayName, role: "admin" });
+      const outcome = describeInvite(isArabic, invite, admin.email);
+      setNotice(
+        invite.status === "not_configured" || invite.status === "failed"
+          ? { ok: false, text: outcome.text.replace(/^(تمت الإضافة، لكن |Added, but )/, "") }
+          : outcome,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : t(isArabic, "تعذّر إرسال الدعوة.", "Could not send the invitation."),
+      );
+    } finally {
+      setBusyEmail(null);
     }
   };
 
@@ -249,8 +280,23 @@ export function AdminManager({
           </div>
         </div>
 
+        <label className={`flex items-center gap-2 text-xs text-slate-600 ${isArabic ? "flex-row-reverse" : ""}`}>
+          <input
+            type="checkbox"
+            checked={sendInvite}
+            onChange={(event) => setSendInvite(event.target.checked)}
+            className="size-3.5 accent-primary"
+          />
+          {t(isArabic, "إرسال دعوة بالبريد الإلكتروني", "Send an invitation email")}
+        </label>
+
         {error ? (
           <p className="text-center text-sm text-red-600">{error}</p>
+        ) : null}
+        {notice ? (
+          <p className={`text-center text-sm ${notice.ok ? "text-emerald-700" : "text-amber-700"}`}>
+            {notice.text}
+          </p>
         ) : null}
 
         {/* Current app-admins */}
@@ -298,6 +344,15 @@ export function AdminManager({
                           : ""}
                       </span>
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => void resend(admin)}
+                      disabled={busyEmail === `resend:${admin.email}`}
+                      title={t(isArabic, "إعادة إرسال الدعوة", "Resend invitation")}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 px-3 py-1 text-xs font-medium text-primary transition hover:bg-primary/5 disabled:opacity-60"
+                    >
+                      {busyEmail === `resend:${admin.email}` ? "…" : t(isArabic, "إعادة الدعوة", "Resend")}
+                    </button>
                     <button
                       type="button"
                       onClick={() => void remove(admin)}

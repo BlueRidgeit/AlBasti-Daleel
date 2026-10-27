@@ -1,5 +1,6 @@
 import { env } from "@/lib/env";
 import { getAuthenticatedUserFromRequest } from "@/lib/auth-server";
+import { sendInvitation } from "@/lib/invite-email";
 import {
   addAppAdmin,
   appAdminsEnabled,
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => undefined)) as
-    | { email?: string; displayName?: string }
+    | { email?: string; displayName?: string; sendInvite?: boolean }
     | undefined;
   const email = body?.email?.trim();
 
@@ -101,7 +102,17 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json({ ok: true, admin });
+  const invite =
+    body?.sendInvite === false
+      ? { status: "skipped" as const }
+      : await sendInvitation({
+          request,
+          to: admin.email,
+          displayName: admin.displayName,
+          role: "admin",
+          invitedBy: user?.displayName ?? user?.email,
+        });
+  return Response.json({ ok: true, admin, invite });
 }
 
 export async function DELETE(request: Request) {
