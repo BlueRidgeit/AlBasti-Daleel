@@ -1,75 +1,75 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
-import { env } from "@/lib/env";
+import { postgresDocStore, type DocStore } from "@/lib/doc-store";
+import { hasDatabaseConfig } from "@/lib/env";
 
-// "Always confirm first": the preview call returns a signed token that binds the exact plan, the
-// user and the number of chat messages at that moment. The create call only accepts it when the
-// conversation has moved on (a NEW user message exists), so the model cannot preview and create
-// within one turn, and it cannot change the content after the user has seen the plan.
+// "Always confirm first". A preview stores the exact plan on the SERVER (one pending plan per user
+// and chat). The model then only calls confirm_creation (no arguments), so it never has to
+// repeat the document content. The server accepts the confirmation only when:
+//   * a pending plan exists for this user and this chat, and it has not expired or been used;
+//   * the conversation has moved on since the preview (a NEW user message exists), so the model
+//     cannot preview and create within one turn;
+//   * a new preview replaces the previous plan, so the user always confirms what was last shown.
 
 const TTL_MS = 30 * 60 * 1000;
 
-const stable = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
+export type PendingPlan<T = unknown> = {
+  planId: string;
+  action: string;
+  params: T;
+  summary: string;
+  messageCount: number;
 };
 
-const key = () => `${env.azureEntraClientSecret ?? ""}:daleel-create-confirm`;
+type Stored = PendingPlan & { id: string; expires: number };
 
-const sign = (payload: string) => createHmac("sha256", key()).update(payload).digest("base64url");
+// Shared across replicas when the Postgres store is configured; otherwise per process.
+const memory = new Map<string, Stored>();
+const store: DocStore | undefined = hasDatabaseConfig ? postgresDocStore("pending-plans") : undefined;
 
-const planHash = (plan: unknown) => createHash("sha256").update(stable(plan)).digest("hex");
+const memKey = (userId: string, threadId: string) => `${userId}:${threadId}`;
 
-export function signPlan(plan: unknown, ctx: { userId: string; messageCount: number }) {
-  const payload = Buffer.from(
-    JSON.stringify({
-      u: ctx.userId,
-      m: ctx.messageCount,
-      h: planHash(plan),
-      e: Date.now() + TTL_MS,
-    }),
-  ).toString("base64url");
-  return `${payload}.${sign(payload)}`;
+export async function savePending<T>(
+  ctx: { userId: string; threadId: string },
+  plan: Omit<PendingPlan<T>, "planId">,
+): Promise<string> {
+  const planId = randomUUID().slice(0, 8);
+  const record: Stored = { ...plan, planId, id: ctx.threadId, expires: Date.now() + TTL_MS };
+  if (store) await store.upsert(record as never, ctx.userId);
+  else memory.set(memKey(ctx.userId, ctx.threadId), record);
+  return planId;
 }
 
-export type VerifyResult = { ok: true } | { ok: false; reason: string };
+async function readPending(userId: string, threadId: string): Promise<Stored | undefined> {
+  if (store) return store.read<Stored & Record<string, unknown>>(threadId, userId);
+  return memory.get(memKey(userId, threadId));
+}
 
-export function verifyPlan(
-  token: string | undefined,
-  plan: unknown,
-  ctx: { userId: string; messageCount: number },
-): VerifyResult {
-  if (!token) return { ok: false, reason: "No confirmation token. Preview first and ask the user to confirm." };
+export async function clearPending(userId: string, threadId: string) {
+  if (store) await store.remove(threadId, userId).catch(() => undefined);
+  else memory.delete(memKey(userId, threadId));
+}
 
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return { ok: false, reason: "The confirmation token is malformed." };
+export type TakeResult<T> = { ok: true; plan: PendingPlan<T> } | { ok: false; reason: string };
 
-  const expected = Buffer.from(sign(payload));
-  const given = Buffer.from(signature);
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
-    return { ok: false, reason: "The confirmation token is not valid." };
+// Checks (does not consume) the pending plan; call clearPending once it has been carried out.
+export async function checkPending<T>(
+  ctx: { userId: string; threadId: string; messageCount: number },
+  planId?: string,
+): Promise<TakeResult<T>> {
+  const pending = await readPending(ctx.userId, ctx.threadId);
+  if (!pending) {
+    return { ok: false, reason: "There is no pending plan. Prepare one first (create_document or create_folder), show it to the user and wait for their confirmation." };
   }
-
-  let data: { u: string; m: number; h: string; e: number };
-  try {
-    data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-  } catch {
-    return { ok: false, reason: "The confirmation token is malformed." };
+  if (Date.now() > pending.expires) {
+    await clearPending(ctx.userId, ctx.threadId);
+    return { ok: false, reason: "The plan expired. Prepare it again and ask the user to confirm." };
   }
-
-  if (data.u !== ctx.userId) return { ok: false, reason: "This confirmation belongs to a different user." };
-  if (Date.now() > data.e) return { ok: false, reason: "The confirmation expired. Preview again and ask the user to confirm." };
-  if (data.h !== planHash(plan)) {
-    return { ok: false, reason: "The content changed after the preview. Preview again and ask the user to confirm." };
+  if (planId && planId !== pending.planId) {
+    return { ok: false, reason: "That is not the latest plan. Only the most recent plan can be confirmed; prepare it again if needed." };
   }
-  if (ctx.messageCount <= data.m) {
-    return { ok: false, reason: "The user has not confirmed yet: wait for their reply to the preview before creating anything." };
+  if (ctx.messageCount <= pending.messageCount) {
+    return { ok: false, reason: "The user has not confirmed yet: wait for their reply to the plan before creating anything." };
   }
-  return { ok: true };
+  return { ok: true, plan: pending as unknown as PendingPlan<T> };
 }

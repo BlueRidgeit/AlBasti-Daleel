@@ -140,6 +140,7 @@ export async function POST(req: Request) {
             return token;
           },
           userId: authenticatedUser.objectId,
+          threadId,
           messageCount: messages.length,
           audit: async (event, detail) => {
             await logSessionEvent({

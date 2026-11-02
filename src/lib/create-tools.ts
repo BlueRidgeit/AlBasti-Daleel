@@ -1,7 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 
-import { signPlan, verifyPlan } from "@/lib/create-confirm";
+import { checkPending, clearPending, savePending } from "@/lib/create-confirm";
 import { fillTemplate, outlineOf, validateBlocks, type Block } from "@/lib/docx-template";
 import {
   downloadItem,
@@ -17,14 +17,15 @@ import {
   uploadNewFile,
 } from "@/lib/sharepoint-write";
 
-// The "create" tools offered to the model when DALEEL_ENABLE_CREATE=true. Every creation is a
-// two-step call: a preview that returns a plan + signed token, then (only after the user has
-// replied in a new message) the same call again with that token.
+// The "create" tools offered to the model when DALEEL_ENABLE_CREATE=true. Creation is always two
+// steps: create_document / create_folder only PREPARE a plan (stored on the server), and
+// confirm_creation carries out the last plan, but only once the user has replied in a new message.
 
 type Context = {
   // Gets a Graph token with write permission for the signed-in user (on-behalf-of).
   acquireWriteToken: () => Promise<string>;
   userId: string;
+  threadId: string;
   messageCount: number;
   audit: (event: string, detail: string) => Promise<void>;
 };
@@ -44,7 +45,20 @@ const blockSchema = z.discriminatedUnion("type", [
 const locationText = (library: string, segments: string[]) => [library, ...segments].join(" / ");
 
 const NEEDS_CONFIRMATION =
-  "Show this plan to the user (location, file name, template, an outline of the content, and anything listed under warnings) and ask them to confirm. Do NOT call this tool again until the user has replied in a new message. Then call it again with exactly the same arguments plus confirmationToken.";
+  "Nothing has been created yet. Show this plan to the user (location, file name, template, an outline of the content, and anything listed under warnings) and ask them to confirm. When the user replies with their confirmation, call confirm_creation (no arguments). Do not call confirm_creation in this same turn.";
+
+type FolderParams = { driveId: string; library: string; folder: string[] };
+type DocumentParams = {
+  driveId: string;
+  library: string;
+  folder: string[];
+  fileName: string;
+  templateId: string;
+  templateDriveId: string;
+  templateName: string;
+  fields: Record<string, string>;
+  blocks: Block[];
+};
 
 export function buildCreateTools(ctx: Context) {
   let writeToken: string | undefined;
@@ -97,13 +111,12 @@ export function buildCreateTools(ctx: Context) {
 
     create_folder: tool({
       description:
-        "Create a folder (and any missing parent folders) in a document library, as the signed-in user. Two steps: call without confirmationToken to get a plan, ask the user to confirm, then call again with the token.",
+        "PREPARE the creation of a folder (and any missing parent folders) in a document library. Nothing is created by this call: it returns a plan to show the user. After the user confirms in a later message, call confirm_creation.",
       inputSchema: z.object({
         library: z.string().min(1).describe("Library name, e.g. Proposals, Projects or Marketing."),
         folderPath: z.string().min(1).describe("Folder path inside the library, e.g. 2026/Acme Trading."),
-        confirmationToken: z.string().optional().describe("Only after the user confirmed the plan."),
       }),
-      execute: async ({ library, folderPath, confirmationToken }) =>
+      execute: async ({ library, folderPath }) =>
         run(async (token) => {
           const segments = parseFolderPath(folderPath);
           if (segments.length === 0) throw new SharePointError("Give a folder path to create.");
@@ -111,37 +124,27 @@ export function buildCreateTools(ctx: Context) {
           const missing = await missingFolders(token, lib.driveId, segments);
           if (missing.length === 0) {
             const existing = await itemAt(token, lib.driveId, segments);
-            return {
-              status: "nothing_to_do" as const,
-              message: "That folder already exists.",
-              url: existing?.webUrl,
-            };
+            return { status: "nothing_to_do" as const, message: "That folder already exists.", url: existing?.webUrl };
           }
-
-          const plan = { action: "create_folder", library: lib.label, folder: segments };
           const where = locationText(lib.label, segments);
-
-          if (!confirmationToken) {
-            return {
-              status: "confirmation_required" as const,
-              plan: { location: where, foldersToCreate: missing },
-              confirmationToken: signPlan(plan, ctx),
-              message: NEEDS_CONFIRMATION,
-            };
-          }
-
-          const verified = verifyPlan(confirmationToken, plan, ctx);
-          if (!verified.ok) return { status: "confirmation_invalid" as const, message: verified.reason };
-
-          const result = await ensureFolder(token, lib.driveId, segments);
-          await ctx.audit("create_folder", where);
-          return { status: "created" as const, location: where, createdFolders: result.created, url: result.webUrl };
+          const planId = await savePending<FolderParams>(ctx, {
+            action: "create_folder",
+            params: { driveId: lib.driveId, library: lib.label, folder: segments },
+            summary: where,
+            messageCount: ctx.messageCount,
+          });
+          return {
+            status: "confirmation_required" as const,
+            planId,
+            plan: { location: where, foldersToCreate: missing },
+            message: NEEDS_CONFIRMATION,
+          };
         }),
     }),
 
     create_document: tool({
       description:
-        "Create a new Word document from a template, in a document library folder (missing folders are created), as the signed-in user. Never overwrites. Two steps: call without confirmationToken to get a plan, ask the user to confirm, then call again with the same arguments plus the token. Template placeholders: {{FieldName}} are filled from `fields`; {{Date}} is automatic; {{BODY}} receives `blocks`.",
+        "PREPARE a new Word document made from a template, in a document library folder (missing folders are created). Nothing is created by this call: it returns a plan (location, file name, outline, warnings) to show the user. After the user confirms in a later message, call confirm_creation. Template placeholders: {{FieldName}} are filled from `fields`; {{Date}} is automatic; {{BODY}} receives `blocks`. Never overwrites.",
       inputSchema: z.object({
         library: z.string().min(1).describe("Library name, e.g. Proposals."),
         folderPath: z.string().default("").describe("Folder path inside the library, e.g. 2026/Acme Trading."),
@@ -152,9 +155,8 @@ export function buildCreateTools(ctx: Context) {
           .default({})
           .describe("Values for the template's {{FieldName}} placeholders, e.g. Title, ClientName, Reference."),
         blocks: z.array(blockSchema).min(1).describe("The document content, in order."),
-        confirmationToken: z.string().optional().describe("Only after the user confirmed the plan."),
       }),
-      execute: async ({ library, folderPath, fileName, templateName, fields, blocks, confirmationToken }) =>
+      execute: async ({ library, folderPath, fileName, templateName, fields, blocks }) =>
         run(async (token) => {
           const typedBlocks = blocks as Block[];
           validateBlocks(typedBlocks);
@@ -162,67 +164,97 @@ export function buildCreateTools(ctx: Context) {
           const name = sanitizeDocxName(fileName);
           const lib = await resolveLibrary(library);
           const template = await findTemplate(token, templateName);
-
-          const normalisedFields = Object.fromEntries(
-            Object.entries(fields)
-              .map(([k, v]) => [k.trim(), String(v)] as const)
-              .sort(([a], [b]) => a.localeCompare(b)),
+          const cleanFields = Object.fromEntries(
+            Object.entries(fields).map(([k, v]) => [k.trim(), String(v)] as const),
           );
-          const plan = {
-            action: "create_document",
-            library: lib.label,
-            folder: segments,
-            fileName: name,
-            template: template.name,
-            fields: normalisedFields,
-            blocks: typedBlocks,
-          };
-          const where = locationText(lib.label, segments);
 
-          // Build the document up front so problems show in the preview, not after the user confirms.
+          // Build the document now so any problem shows in the plan, not after the user confirms.
           const templateBytes = await downloadItem(token, template.driveId, template.id);
-          const filled = await fillTemplate(templateBytes, { fields: normalisedFields, blocks: typedBlocks });
+          const filled = await fillTemplate(templateBytes, { fields: cleanFields, blocks: typedBlocks });
           const warnings: string[] = [];
-          if (!filled.bodyPlaced) warnings.push("The template has no {{BODY}} marker, so the content will be added at the end.");
-          if (filled.unreplaced.length > 0) {
+          if (!filled.bodyPlaced) {
             warnings.push(
-              `These template fields have no value and will stay as {{...}} text: ${filled.unreplaced.join(", ")}. Ask the user for them or pass them in fields.`,
+              `The template has no {{BODY}} marker, so the content will be added at the end of the document. Placeholders found in the template: ${filled.placeholdersFound.join(", ") || "none"}.`,
             );
           }
-
-          if (!confirmationToken) {
-            const missing = await missingFolders(token, lib.driveId, segments);
-            const taken = await itemAt(token, lib.driveId, [...segments, name]);
-            if (taken) warnings.push(`A file named "${name}" already exists there; the new document will get a numbered name and the existing one will not be touched.`);
-            return {
-              status: "confirmation_required" as const,
-              plan: {
-                location: where,
-                fileName: name,
-                template: template.name,
-                foldersToCreate: missing,
-                fieldsFilled: normalisedFields,
-                outline: outlineOf(typedBlocks),
-                warnings,
-              },
-              confirmationToken: signPlan(plan, ctx),
-              message: NEEDS_CONFIRMATION,
-            };
+          if (filled.unreplaced.length > 0) {
+            warnings.push(
+              `These template fields have no value and will stay as {{...}} text: ${filled.unreplaced.join(", ")}. Ask the user for them, then prepare the plan again with those fields.`,
+            );
+          }
+          const missing = await missingFolders(token, lib.driveId, segments);
+          const taken = await itemAt(token, lib.driveId, [...segments, name]);
+          if (taken) {
+            warnings.push(`A file named "${name}" already exists there; the new document will get a numbered name and the existing one will not be touched.`);
           }
 
-          const verified = verifyPlan(confirmationToken, plan, ctx);
-          if (!verified.ok) return { status: "confirmation_invalid" as const, message: verified.reason };
+          const where = locationText(lib.label, segments);
+          const planId = await savePending<DocumentParams>(ctx, {
+            action: "create_document",
+            params: {
+              driveId: lib.driveId,
+              library: lib.label,
+              folder: segments,
+              fileName: name,
+              templateId: template.id,
+              templateDriveId: template.driveId,
+              templateName: template.name,
+              fields: cleanFields,
+              blocks: typedBlocks,
+            },
+            summary: `${where} / ${name}`,
+            messageCount: ctx.messageCount,
+          });
+          return {
+            status: "confirmation_required" as const,
+            planId,
+            plan: {
+              location: where,
+              fileName: name,
+              template: template.name,
+              foldersToCreate: missing,
+              fieldsFilled: cleanFields,
+              outline: outlineOf(typedBlocks),
+              warnings,
+            },
+            message: NEEDS_CONFIRMATION,
+          };
+        }),
+    }),
 
-          const folder = await ensureFolder(token, lib.driveId, segments);
-          const file = await uploadNewFile(token, lib.driveId, segments, name, filled.buffer);
-          await ctx.audit("create_document", `${where} / ${file.name}`);
+    confirm_creation: tool({
+      description:
+        "Carry out the plan that the user has just confirmed (the most recent create_document or create_folder plan). Call this with no arguments ONLY after the user has replied with their confirmation in a NEW message. If the user wants changes, prepare a new plan instead.",
+      inputSchema: z.object({
+        planId: z.string().optional().describe("The planId of the plan being confirmed (optional)."),
+      }),
+      execute: async ({ planId }) =>
+        run(async (token) => {
+          const checked = await checkPending<FolderParams | DocumentParams>(ctx, planId);
+          if (!checked.ok) return { status: "confirmation_invalid" as const, message: checked.reason };
+          const plan = checked.plan;
+
+          if (plan.action === "create_folder") {
+            const params = plan.params as FolderParams;
+            const result = await ensureFolder(token, params.driveId, params.folder);
+            await clearPending(ctx.userId, ctx.threadId);
+            await ctx.audit("create_folder", plan.summary);
+            return { status: "created" as const, location: plan.summary, createdFolders: result.created, url: result.webUrl };
+          }
+
+          const params = plan.params as DocumentParams;
+          const templateBytes = await downloadItem(token, params.templateDriveId, params.templateId);
+          const filled = await fillTemplate(templateBytes, { fields: params.fields, blocks: params.blocks });
+          const folder = await ensureFolder(token, params.driveId, params.folder);
+          const file = await uploadNewFile(token, params.driveId, params.folder, params.fileName, filled.buffer);
+          await clearPending(ctx.userId, ctx.threadId);
+          await ctx.audit("create_document", `${plan.summary} -> ${file.name}`);
           return {
             status: "created" as const,
-            location: where,
+            location: locationText(params.library, params.folder),
             fileName: file.name,
             createdFolders: folder.created,
             url: file.webUrl,
-            warnings,
           };
         }),
     }),

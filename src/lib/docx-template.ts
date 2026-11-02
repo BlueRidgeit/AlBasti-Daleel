@@ -18,10 +18,14 @@ export type FillResult = {
   buffer: Buffer;
   bodyPlaced: boolean;
   unreplaced: string[];
+  // Every {{...}} found in the template (so a missing/mistyped marker can be diagnosed).
+  placeholdersFound: string[];
 };
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PLACEHOLDER = /\{\{\s*([^{}]+?)\s*\}\}/g;
+// {{BODY}} (also tolerates curly/“smart” braces and stray spaces typed by Word autocorrect)
+const BODY_MARKER = /[{｛]\s*[{｛]\s*BODY\s*[}｝]\s*[}｝]/i;
 const ARABIC = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
 const MAX_BLOCKS = 500;
 const MAX_CHARS = 250_000;
@@ -64,7 +68,7 @@ function replaceFields(doc: Doc, fields: Map<string, string>, leftover: Set<stri
     const text = paragraphText(p);
     if (!text.includes("{{")) continue;
     // The BODY marker paragraph is handled separately.
-    if (/^\s*\{\{\s*BODY\s*\}\}\s*$/i.test(text)) continue;
+    if (BODY_MARKER.test(text)) continue;
     let changed = false;
     const next = text.replace(PLACEHOLDER, (whole, name: string) => {
       const value = fields.get(name.trim().toLowerCase());
@@ -298,18 +302,31 @@ export async function fillTemplate(
 
   // Main document: fields, then the BODY marker.
   const doc = parse(await documentFile.async("string"));
+  const found = new Set<string>();
+  for (const p of byTag(doc, "w:p")) {
+    for (const m of paragraphText(p).matchAll(PLACEHOLDER)) found.add(m[1].trim());
+  }
   replaceFields(doc, fields, leftover);
 
   const content = buildBlocks(doc, input.blocks, styles);
   let bodyPlaced = false;
   for (const p of byTag(doc, "w:p")) {
-    if (/^\s*\{\{\s*BODY\s*\}\}\s*$/i.test(paragraphText(p))) {
-      const parent = p.parentNode!;
+    const text = paragraphText(p);
+    if (!BODY_MARKER.test(text)) continue;
+    const parent = p.parentNode!;
+    const rest = text.replace(BODY_MARKER, "").trim();
+    if (rest === "") {
+      // The marker has a paragraph to itself: the content takes its place.
       for (const node of content) parent.insertBefore(node, p);
       parent.removeChild(p);
-      bodyPlaced = true;
-      break;
+    } else {
+      // The marker shares a paragraph with other text: keep that text, put the content after it.
+      setParagraphText(p, text.replace(BODY_MARKER, "").trim());
+      const next = p.nextSibling;
+      for (const node of content) parent.insertBefore(node, next);
     }
+    bodyPlaced = true;
+    break;
   }
   if (!bodyPlaced) {
     // No marker: append before the final section properties so the content is not lost.
@@ -328,5 +345,6 @@ export async function fillTemplate(
     buffer: await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }),
     bodyPlaced,
     unreplaced: Array.from(leftover).filter((name) => name.toLowerCase() !== "body"),
+    placeholdersFound: Array.from(found),
   };
 }
