@@ -97,7 +97,9 @@ export async function validateApiAccessToken(token: string) {
   return result.payload;
 }
 
-export async function acquireGraphTokenOnBehalfOf(token: string) {
+export const GRAPH_WRITE_SCOPES = ["https://graph.microsoft.com/Files.ReadWrite.All"];
+
+export async function acquireGraphTokenOnBehalfOf(token: string, scopes?: string[]) {
   if (!hasServerAuthConfig) {
     return undefined;
   }
@@ -105,7 +107,7 @@ export async function acquireGraphTokenOnBehalfOf(token: string) {
   await validateApiAccessToken(token);
   const result = await getConfidentialClient().acquireTokenOnBehalfOf({
     oboAssertion: token,
-    scopes: env.azureGraphScopes,
+    scopes: scopes ?? env.azureGraphScopes,
     skipCache: false,
   });
 

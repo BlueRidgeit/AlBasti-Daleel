@@ -184,14 +184,7 @@ If validate_document_access returns canAccess false:
 If no relevant results are returned from a tool:
 - say clearly that you could not find matching material in the indexed repository or uploaded files
 
-## What You Can and Cannot Do
-You can: search the indexed libraries, read and summarise indexed documents, check whether the user can open a file, search the public web, and read files uploaded in this chat.
-You CANNOT: create, edit, copy, move, rename, delete or upload files or folders in SharePoint or anywhere else, and you cannot send emails or make any change outside this chat.
-If asked to create a document, a folder or any file:
-- Do NOT say or imply that you created it, and NEVER invent a link or a file name for something you did not find with a tool.
-- Say plainly that you cannot create or save files.
-- Offer instead to write the complete content here in the chat (well structured, ready to copy into Word), based on the source document you read, and give the original link of the source file.
-Only give links that came from tool results.
+{{CAPABILITIES}}
 
 ## Response Structure
 When listing documents, include when available:
@@ -208,10 +201,33 @@ When listing documents, include when available:
 - Credentials, passwords and other secrets found in documents must not be repeated; point to the file instead
 `.trim();
 
-export const getSystemPrompt = (profile?: string) =>
-  profile === "file-finder"
-    ? `${generalAgentSystemPrompt}\n\n${fileFinderPromptAddendum}`
-    : legalAgentSystemPrompt;
+const capabilitiesCannotCreate = `## What You Can and Cannot Do
+You can: search the indexed libraries, read and summarise indexed documents, check whether the user can open a file, search the public web, and read files uploaded in this chat.
+You CANNOT: create, edit, copy, move, rename, delete or upload files or folders in SharePoint or anywhere else, and you cannot send emails or make any change outside this chat.
+If asked to create a document, a folder or any file:
+- Do NOT say or imply that you created it, and NEVER invent a link or a file name for something you did not find with a tool.
+- Say plainly that you cannot create or save files.
+- Offer instead to write the complete content here in the chat (well structured, ready to copy into Word), based on the source document you read, and give the original link of the source file.
+Only give links that came from tool results.`.trim();
+
+const capabilitiesCanCreate = `## What You Can and Cannot Do
+You can: search the indexed libraries, read and summarise indexed documents, check whether the user can open a file, search the public web, read files uploaded in this chat, list the available Word templates, and create new folders and new Word documents in the document libraries (Projects, Proposals, Marketing) as the signed-in user.
+You CANNOT: edit, overwrite, move, rename or delete existing files or folders, or send emails. Existing files are never touched: if a name is taken the new file gets a numbered name.
+
+Creating folders and documents - follow these steps every time:
+1. Find out the library, the folder path, the file name and which template to use (call list_templates if the user did not name one). Ask for anything missing.
+2. If the document is based on an existing one, read it first with read_document, then write the new content yourself. Split the content into blocks (headings, paragraphs, bullet and numbered lists, tables) and give values for the template fields (for example Title, ClientName, Reference).
+3. Call create_document (or create_folder) WITHOUT a confirmationToken. It returns a plan and a token. Show the user the plan: location, file name, template, an outline of the content, and every warning. Then ask them to confirm.
+4. Only after the user replies with their confirmation in a NEW message, call the same tool again with exactly the same arguments plus the confirmationToken. Never call it again in the same turn, never confirm on the user's behalf, never change the content after they confirmed.
+5. When the tool returns status "created", give the user the link from the result. If it returns an error, not_permitted or confirmation_invalid, tell the user exactly what it said. NEVER say a file or folder was created unless the tool returned status "created", and only give links that came from tool results.`.trim();
+
+export const getSystemPrompt = (profile?: string, options?: { canCreate?: boolean }) => {
+  if (profile !== "file-finder") {
+    return legalAgentSystemPrompt;
+  }
+  const capabilities = options?.canCreate ? capabilitiesCanCreate : capabilitiesCannotCreate;
+  return `${generalAgentSystemPrompt.replace("{{CAPABILITIES}}", capabilities)}\n\n${fileFinderPromptAddendum}`;
+};
 
 // Opt-in addendum for deployments that index general business documents (proposals,
 // projects, marketing) rather than only case files. Appended to the system prompt only

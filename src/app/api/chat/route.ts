@@ -16,8 +16,10 @@ import {
   getAuthenticatedUserFromRequest,
   acquireGraphTokenOnBehalfOf,
   getRequestBearerToken,
+  GRAPH_WRITE_SCOPES,
 } from "@/lib/auth-server";
 import { logSessionEvent, persistChatThread } from "@/lib/chat-history";
+import { buildCreateTools } from "@/lib/create-tools";
 import { getSystemPrompt } from "@/lib/legal-agent";
 import {
   buildLanguageDirective,
@@ -128,12 +130,36 @@ export async function POST(req: Request) {
     });
   }
 
+  // Opt-in (DALEEL_ENABLE_CREATE): folder/document creation, only for a signed-in user.
+  const createTools =
+    env.createEnabled && apiAccessToken && authenticatedUser?.objectId
+      ? buildCreateTools({
+          acquireWriteToken: async () => {
+            const token = await acquireGraphTokenOnBehalfOf(apiAccessToken, GRAPH_WRITE_SCOPES);
+            if (!token) throw new Error("No Graph token");
+            return token;
+          },
+          userId: authenticatedUser.objectId,
+          messageCount: messages.length,
+          audit: async (event, detail) => {
+            await logSessionEvent({
+              userId: authenticatedUser.objectId!,
+              threadId,
+              route: "/api/chat",
+              event,
+              detail,
+            }).catch(() => undefined);
+          },
+        })
+      : {};
+
   const result = streamText({
     model,
-    system: `${getSystemPrompt(env.promptProfile)}\n\n## Current Conversation Language\n${languageDirective}`,
+    system: `${getSystemPrompt(env.promptProfile, { canCreate: Object.keys(createTools).length > 0 })}\n\n## Current Conversation Language\n${languageDirective}`,
     messages: await convertToModelMessages(modelMessages),
     tools: {
       ...frontendTools(tools ?? {}),
+      ...createTools,
       search_documents: tool({
         description:
           env.promptProfile === "file-finder"

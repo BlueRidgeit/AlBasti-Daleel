@@ -119,6 +119,17 @@ export const env = {
   mailFrom: trimToUndefined(process.env.MAIL_FROM),
   // Public address used in invitation links, e.g. https://daleel.blueridgeit.com
   appBaseUrl: trimToUndefined(process.env.APP_BASE_URL)?.replace(/\/$/, ""),
+  // Opt-in: lets Daleel create folders and Word documents (from a template) in SharePoint, as the
+  // signed-in user. Needs the delegated Graph permission Files.ReadWrite.All on the Daleel API app.
+  createEnabled: process.env.DALEEL_ENABLE_CREATE?.trim().toLowerCase() === "true",
+  // Optional comma-separated library labels Daleel may write to (default: every indexed library).
+  createLibraries:
+    trimToUndefined(process.env.DALEEL_CREATE_LIBRARIES)
+      ?.split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean) ?? [],
+  // Where the Word templates live: "<Library>/<folder>/...".
+  templatesPath: trimToUndefined(process.env.DALEEL_TEMPLATES_PATH) ?? "Proposals/Templates",
   azureWebSearchCountry:
     trimToUndefined(process.env.AZURE_WEB_SEARCH_COUNTRY) ?? "AE",
   azureWebSearchContextSize:
