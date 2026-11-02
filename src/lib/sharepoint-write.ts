@@ -5,7 +5,6 @@ import { env } from "@/lib/env";
 // only: nothing here overwrites, moves or deletes.
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
-const MAX_SIMPLE_UPLOAD = 4 * 1024 * 1024;
 const SEARCH_API_VERSION = "2025-09-01";
 
 export class SharePointError extends Error {
@@ -234,6 +233,11 @@ export async function downloadItem(token: string, driveId: string, itemId: strin
   return Buffer.from(await response.arrayBuffer());
 }
 
+// Graph's simple upload is limited to a few MB; bigger files (templates with logos/images) go
+// through an upload session, sent in chunks (each a multiple of 320 KiB as Graph requires).
+const CHUNK = 12 * 320 * 1024; // 3.75 MiB
+const MAX_UPLOAD = 150 * 1024 * 1024;
+
 export async function uploadNewFile(
   token: string,
   driveId: string,
@@ -241,23 +245,53 @@ export async function uploadNewFile(
   fileName: string,
   data: Buffer,
 ): Promise<{ name: string; webUrl?: string; id: string }> {
-  if (data.length > MAX_SIMPLE_UPLOAD) {
-    throw new SharePointError("The generated document is larger than 4 MB, which this first version cannot upload.");
+  if (data.length > MAX_UPLOAD) {
+    throw new SharePointError(`The generated document is ${(data.length / 1048576).toFixed(0)} MB, above the ${MAX_UPLOAD / 1048576} MB limit.`);
   }
   const path = encodePath([...folderSegments, fileName]);
-  // conflictBehavior=rename: an existing file is never overwritten; the new one gets a numbered name.
-  const response = await graph(
-    token,
-    `/drives/${encodeURIComponent(driveId)}/root:/${path}:/content?@microsoft.graph.conflictBehavior=rename`,
-    {
+  const drive = `/drives/${encodeURIComponent(driveId)}`;
+
+  if (data.length <= 4 * 1024 * 1024) {
+    // conflictBehavior=rename: an existing file is never overwritten; the new one gets a numbered name.
+    const response = await graph(token, `${drive}/root:/${path}:/content?@microsoft.graph.conflictBehavior=rename`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+      body: new Uint8Array(data),
+    });
+    if (!response.ok) await failFrom(response, "save the document");
+    const item = (await response.json()) as DriveItem;
+    return { id: item.id, name: item.name ?? fileName, webUrl: item.webUrl };
+  }
+
+  const session = await graph(token, `${drive}/root:/${path}:/createUploadSession`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }),
+  });
+  if (!session.ok) await failFrom(session, "start saving the document");
+  const { uploadUrl } = (await session.json()) as { uploadUrl?: string };
+  if (!uploadUrl) throw new SharePointError("SharePoint did not return an upload address.");
+
+  for (let start = 0; start < data.length; start += CHUNK) {
+    const end = Math.min(start + CHUNK, data.length);
+    const chunk = data.subarray(start, end);
+    // The upload URL is pre-authorised: no Authorization header is sent to it.
+    const response = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Content-Length": String(chunk.length),
+        "Content-Range": `bytes ${start}-${end - 1}/${data.length}`,
       },
-      body: new Uint8Array(data),
-    },
-  );
-  if (!response.ok) await failFrom(response, "save the document");
-  const item = (await response.json()) as DriveItem;
-  return { id: item.id, name: item.name ?? fileName, webUrl: item.webUrl };
+      body: new Uint8Array(chunk),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (end < data.length) {
+      if (response.status !== 202) await failFrom(response, "upload the document");
+      continue;
+    }
+    if (!response.ok) await failFrom(response, "finish saving the document");
+    const item = (await response.json()) as DriveItem;
+    return { id: item.id, name: item.name ?? fileName, webUrl: item.webUrl };
+  }
+  throw new SharePointError("The upload did not complete.");
 }

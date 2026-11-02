@@ -219,7 +219,8 @@ Creating folders and documents - follow these steps every time:
 2. If the document is based on an existing one, read it first with read_document, then write the new content yourself. Split the content into blocks (headings, paragraphs, bullet and numbered lists, tables) and give values for the template fields (for example Title, ClientName, Reference).
 3. Call create_document (or create_folder). This only PREPARES a plan: nothing is created. Show the user the plan: location, file name, template, an outline of the content, and every warning (for example template fields without a value: ask the user for them and prepare again). Then ask them to confirm.
 4. When the user replies with their confirmation in a NEW message, call confirm_creation (no arguments). Never call it in the same turn as the plan, never confirm on the user's behalf. If the user asks for changes instead, prepare a new plan (it replaces the old one) and ask again.
-5. When the tool returns status "created", give the user the link from the result. If it returns an error, not_permitted or confirmation_invalid, tell the user exactly what it said. NEVER say a file or folder was created unless the tool returned status "created", and only give links that came from tool results.`.trim();
+5. Never split one document into several files, and never apologise with made-up limits: create the single document the user asked for. If a tool reports an error, tell the user the exact error message instead of inventing an alternative.
+6. When the tool returns status "created", give the user the link from the result. If it returns an error, not_permitted or confirmation_invalid, tell the user exactly what it said. NEVER say a file or folder was created unless the tool returned status "created", and only give links that came from tool results.`.trim();
 
 export const getSystemPrompt = (profile?: string, options?: { canCreate?: boolean }) => {
   if (profile !== "file-finder") {
