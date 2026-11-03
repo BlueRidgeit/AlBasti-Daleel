@@ -17,8 +17,8 @@ already does) before its title, link or text is returned.
   SharePoint confirms access; otherwise nothing from the index is returned. `validateDocumentAccess`
   does not return the indexed title or link for a denied file.
 * `/api/libraries` (the library picker and its document counts): with the flag on it requires
-  sign-in (no list on the login screen) and lists only libraries whose root folder the user can
-  open (`GET /drives/{drive}/items/root`). A user with access to none sees an empty picker with
+  sign-in (no list on the login screen) and lists only libraries where the user can see at
+  least one item directly in the top folder (`GET /drives/{drive}/items/root/children?$top=1`). A user with access to none sees an empty picker with
   "No libraries are available to your account." A user with access only to a subfolder inside a
   library will not see that library in the picker, but search still finds their documents.
 * Callers: `/api/chat`, `/api/integration/chat`, `/api/search`, `/api/search-documents`,
@@ -27,3 +27,7 @@ already does) before its title, link or text is returned.
 Not covered: previously saved chat history, document counts of libraries the user can open (the
 count is the library total), and files reachable only
 through a sharing link (the item endpoint checks the user's direct or group access).
+
+Troubleshooting: set `DALEEL_PERMISSION_DEBUG=true` on the container app to log each check (HTTP
+status, verdict and Graph path; never tokens), then read the log with
+`az containerapp logs show -g Daleel-BLIT -n daleel-web --tail 100`. Switch it off afterwards.

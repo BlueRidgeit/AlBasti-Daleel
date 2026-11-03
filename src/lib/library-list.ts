@@ -100,9 +100,10 @@ export async function listLibraries(viewer?: Viewer): Promise<LibraryListResult>
       Boolean(entry.driveId),
     );
 
-  // "root" is Graph's alias for the library's top folder.
+  // "root" is Graph's alias for the library's top folder. A library is listed only if the user can
+  // see at least one item directly in it.
   const verdicts = await checkItemAccess(
-    checkable.map((entry) => ({ driveId: entry.driveId, itemId: "root" })),
+    checkable.map((entry) => ({ driveId: entry.driveId, itemId: "root", mode: "contents" as const })),
     viewer,
   );
 

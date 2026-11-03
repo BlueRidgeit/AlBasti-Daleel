@@ -99,8 +99,11 @@ const writeCache = (key: string | undefined, allowed: boolean, ttlSeconds: numbe
 };
 
 type BatchResponse = {
-  responses?: { id?: string; status?: number }[];
+  responses?: { id?: string; status?: number; body?: { value?: unknown[] } }[];
 };
+
+// Set DALEEL_PERMISSION_DEBUG=true to log each SharePoint check (status and path only, never tokens).
+const debugEnabled = () => process.env.DALEEL_PERMISSION_DEBUG?.trim().toLowerCase() === "true";
 
 const statusToVerdict = (status?: number): AccessVerdict => {
   if (status === 200) {
@@ -113,7 +116,15 @@ const statusToVerdict = (status?: number): AccessVerdict => {
   return "unknown"; // 401, 429, 5xx, no answer: cannot tell, so do not show.
 };
 
-export type ItemRef = { driveId: string; itemId: string };
+// mode "item" (default): can the user open this item? mode "contents": can the user see at least one
+// item directly inside this folder (used for a library's top folder, where being able to open the
+// folder itself is not enough to prove the user can see anything in it).
+export type ItemRef = { driveId: string; itemId: string; mode?: "item" | "contents" };
+
+const itemPath = (item: ItemRef) => {
+  const base = `/drives/${encodeURIComponent(item.driveId)}/items/${encodeURIComponent(item.itemId)}`;
+  return item.mode === "contents" ? `${base}/children?$top=1&$select=id` : `${base}?$select=id`;
+};
 
 // Ask SharePoint, as the user, whether each item can be opened. One call per 20 items.
 export async function checkItemAccess(
@@ -129,7 +140,11 @@ export async function checkItemAccess(
 
   const pending: { index: number; key?: string }[] = [];
   items.forEach((item, index) => {
-    const key = cacheKey(viewer, item.driveId, item.itemId);
+    const key = cacheKey(
+      viewer,
+      item.driveId,
+      item.mode === "contents" ? `contents:${item.itemId}` : item.itemId,
+    );
     const cached = readCache(key, cacheSeconds);
     if (cached === undefined) {
       pending.push({ index, key });
@@ -154,7 +169,7 @@ export async function checkItemAccess(
           requests: group.map((entry, position) => ({
             id: String(position),
             method: "GET",
-            url: `/drives/${encodeURIComponent(items[entry.index].driveId)}/items/${encodeURIComponent(items[entry.index].itemId)}?$select=id`,
+            url: itemPath(items[entry.index]),
           })),
         }),
         signal: controller.signal,
@@ -171,7 +186,19 @@ export async function checkItemAccess(
         if (!entry) {
           continue;
         }
-        const verdict = statusToVerdict(answer.status);
+        let verdict = statusToVerdict(answer.status);
+        if (
+          verdict === "allowed" &&
+          items[entry.index].mode === "contents" &&
+          !(Array.isArray(answer.body?.value) && answer.body.value.length > 0)
+        ) {
+          verdict = "denied"; // opened, but nothing in it is visible to this user
+        }
+        if (debugEnabled()) {
+          console.log(
+            `[permission] ${answer.status} ${verdict} ${itemPath(items[entry.index])}`,
+          );
+        }
         verdicts[entry.index] = verdict;
         if (verdict !== "unknown") {
           writeCache(entry.key, verdict === "allowed", cacheSeconds);
