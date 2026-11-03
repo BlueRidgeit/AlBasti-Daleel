@@ -187,6 +187,7 @@ export async function POST(req: Request) {
           searchDocuments(query, {
             top,
             libraries: selectedLibraries,
+            viewer: { graphAccessToken, userId: authenticatedUser?.objectId },
           }),
       }),
       read_document: tool({
@@ -205,7 +206,14 @@ export async function POST(req: Request) {
             .describe("The specific question or angle to focus on while reading."),
         }),
         execute: async ({ itemId, question }) =>
-          readDocument(req, itemId, question, graphAccessToken, graphAccessError),
+          readDocument(
+            req,
+            itemId,
+            question,
+            graphAccessToken,
+            graphAccessError,
+            authenticatedUser?.objectId,
+          ),
       }),
       validate_document_access: tool({
         description:

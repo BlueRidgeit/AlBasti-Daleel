@@ -3,6 +3,7 @@ import {
   pickRelevantSections,
 } from "@/lib/document-extract";
 import { env, hasServerAuthConfig } from "@/lib/env";
+import { checkItemAccess, isPermissionTrimmingEnabled } from "@/lib/permission-trim";
 import {
   readIndexedDocument,
   resolveIndexedDocumentReference,
@@ -63,6 +64,55 @@ const appendCaveat = async (
     ...fallback,
     caveats: [...fallback.caveats, caveat],
   };
+};
+
+// With SharePoint permission trimming on, the indexed copy of a file may only be used after
+// SharePoint confirms this user can open the file. Otherwise nothing from the index is returned.
+const appendCaveatChecked = async ({
+  itemId,
+  driveId,
+  accessToken,
+  userId,
+  question,
+  caveat,
+}: {
+  itemId: string;
+  driveId?: string;
+  accessToken?: string;
+  userId?: string;
+  question: string | undefined;
+  caveat: string;
+}): Promise<ReadDocumentResult> => {
+  if (!isPermissionTrimmingEnabled()) {
+    return appendCaveat(itemId, question, caveat);
+  }
+
+  const deny = (reason: string): ReadDocumentResult => ({
+    itemId,
+    strategy: "indexed-retrieval-fallback",
+    excerpts: [],
+    caveats: [reason],
+  });
+
+  if (!accessToken || !driveId) {
+    return deny(
+      "Your SharePoint permissions could not be verified, so the content of this document is not shown.",
+    );
+  }
+
+  const [verdict] = await checkItemAccess([{ driveId, itemId }], {
+    graphAccessToken: accessToken,
+    userId,
+  });
+
+  if (verdict === "allowed") {
+    return appendCaveat(itemId, question, caveat);
+  }
+  return deny(
+    verdict === "denied"
+      ? "You do not have permission to open this document in SharePoint, so Daleel cannot show its content."
+      : "Your SharePoint permissions could not be verified right now, so the content of this document is not shown.",
+  );
 };
 
 const looksLikePlaceholderReference = (value: string) =>
@@ -175,6 +225,7 @@ export async function readDocument(
   question?: string,
   graphAccessToken?: string,
   graphAccessError?: string,
+  userId?: string,
 ): Promise<ReadDocumentResult> {
   const requestedItemId = itemId.trim();
   const accessToken = getGraphAccessToken(request, graphAccessToken);
@@ -188,8 +239,18 @@ export async function readDocument(
   // legacy SHAREPOINT_DRIVE_ID when the index has no driveId for this item.
   const resolvedDriveId = indexedReference?.driveId ?? env.sharePointDriveId;
 
+  const fallbackTo = (id: string, q: string | undefined, caveat: string) =>
+    appendCaveatChecked({
+      itemId: id,
+      driveId: resolvedDriveId,
+      accessToken,
+      userId,
+      question: q,
+      caveat,
+    });
+
   if (!resolvedDriveId) {
-    return appendCaveat(
+    return fallbackTo(
       itemId,
       question,
       "Live SharePoint reading is not configured because no drive id is available (set SHAREPOINT_DRIVE_ID or index the document with a driveId).",
@@ -197,7 +258,7 @@ export async function readDocument(
   }
 
   if (!accessToken) {
-    return appendCaveat(
+    return fallbackTo(
       requestedItemId,
       question,
       graphAccessError
@@ -213,7 +274,7 @@ export async function readDocument(
     (looksLikePlaceholderReference(requestedItemId) ||
       looksLikeFilenameReference(requestedItemId))
   ) {
-    return appendCaveat(
+    return fallbackTo(
       requestedItemId,
       question,
       "Live SharePoint reading could not start because the provided document reference was not a valid SharePoint item id. Use the exact itemId returned by search_documents, or ask Daleel to locate the file first.",
@@ -260,7 +321,7 @@ export async function readDocument(
             ? `The signed-in user could not open this SharePoint file through the direct drive route, and the share-link route also failed. Direct route: ${details} Share-link route: ${shareDetails}`
             : `A live SharePoint read failed on both the direct drive route and the share-link route. Direct route: ${details} Share-link route: ${shareDetails}`;
 
-        return appendCaveat(resolvedItemId, question, combinedCaveat);
+        return fallbackTo(resolvedItemId, question, combinedCaveat);
       }
     }
 
@@ -269,7 +330,7 @@ export async function readDocument(
         ? "The signed-in user could not open this SharePoint file with their current permissions, so the answer fell back to indexed retrieval."
         : `A live SharePoint read failed, so the answer fell back to indexed retrieval. Details: ${details}`;
 
-    return appendCaveat(resolvedItemId, question, accessCaveat);
+    return fallbackTo(resolvedItemId, question, accessCaveat);
   }
 }
 
@@ -316,9 +377,9 @@ export async function validateDocumentAccess(
   ) {
     return {
       itemId: requestedItemId,
-      title: indexedReference?.title,
-      url: indexedReference?.url,
-      lastModified: indexedReference?.lastModified,
+      title: isPermissionTrimmingEnabled() ? undefined : indexedReference?.title,
+      url: isPermissionTrimmingEnabled() ? undefined : indexedReference?.url,
+      lastModified: isPermissionTrimmingEnabled() ? undefined : indexedReference?.lastModified,
       canAccess: false,
       method: "direct-drive-route",
       reason:
@@ -379,11 +440,13 @@ export async function validateDocumentAccess(
             ? shareError.message
             : "Unknown share-link-route error.";
 
+        const hideDetails = isPermissionTrimmingEnabled();
         return {
           itemId: resolvedItemId,
-          title: indexedMetadata.title,
-          url: indexedMetadata.url,
-          lastModified: indexedMetadata.lastModified,
+          // With permission trimming on, do not reveal the name or link of a file the user cannot open.
+          title: hideDetails ? undefined : indexedMetadata.title,
+          url: hideDetails ? undefined : indexedMetadata.url,
+          lastModified: hideDetails ? undefined : indexedMetadata.lastModified,
           canAccess: false,
           method: "share-link-route",
           reason:

@@ -2,6 +2,7 @@ import { enforceAccess } from "@/lib/route-guard";
 import { z } from "zod";
 
 import { searchDocuments } from "@/lib/search-documents";
+import { getViewerFromRequest } from "@/lib/viewer";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,10 @@ export async function POST(request: Request) {
   }
 
   const payload = requestSchema.parse(await request.json());
-  const result = await searchDocuments(payload.query, { top: payload.top });
+  const result = await searchDocuments(payload.query, {
+    top: payload.top,
+    viewer: await getViewerFromRequest(request),
+  });
 
   return Response.json(result);
 }

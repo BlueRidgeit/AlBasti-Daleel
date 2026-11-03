@@ -3,6 +3,7 @@ import {
   searchDocumentsAdvanced,
   type FileTypeCategory,
 } from "@/lib/search-documents";
+import { getViewerFromRequest } from "@/lib/viewer";
 
 const FILE_TYPE_VALUES: FileTypeCategory[] = [
   "word",
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       partWords: body.partWords,
       libraries: Array.isArray(body.libraries) ? body.libraries : undefined,
       fileTypes,
+      viewer: await getViewerFromRequest(request),
     });
 
     return Response.json(result);

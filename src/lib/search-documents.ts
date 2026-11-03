@@ -1,4 +1,9 @@
 import { env, hasAzureSearchConfig } from "@/lib/env";
+import {
+  filterAccessibleDocuments,
+  isPermissionTrimmingEnabled,
+  type Viewer,
+} from "@/lib/permission-trim";
 
 const SEARCH_API_VERSION = "2025-09-01";
 
@@ -57,11 +62,16 @@ export type SearchDocumentsResult = {
   query: string;
   totalMatches: number;
   documents: SearchDocumentMatch[];
+  // Set only when SharePoint permission trimming could not complete a check (see permission-trim.ts).
+  notice?: string;
 };
 
 type SearchDocumentsOptions = {
   top?: number;
   libraries?: string[];
+  // The signed-in user. Needed when DALEEL_ENFORCE_SHAREPOINT_PERMISSIONS is on; without it no
+  // documents are returned.
+  viewer?: Viewer;
 };
 
 const normalizeEndpoint = (endpoint: string) => endpoint.replace(/\/$/, "");
@@ -215,7 +225,7 @@ async function embedQuery(text: string): Promise<number[] | undefined> {
 
 export async function searchDocuments(
   query: string,
-  { top = 6, libraries }: SearchDocumentsOptions = {},
+  { top = 6, libraries, viewer }: SearchDocumentsOptions = {},
 ): Promise<SearchDocumentsResult> {
   if (!hasAzureSearchConfig) {
     return {
@@ -230,7 +240,10 @@ export async function searchDocuments(
   const useSemantic =
     Boolean(trimmedQuery) && Boolean(env.azureSearchSemanticConfiguration);
   const libraryFilter = buildLibraryFilter(libraries);
-  const candidateCount = Math.min(Math.max(top * 3, 6), 30);
+  // With permission trimming on, fetch more candidates because some will be removed.
+  const candidateCount = isPermissionTrimmingEnabled()
+    ? Math.min(Math.max(top * 4, 12), 50)
+    : Math.min(Math.max(top * 3, 6), 30);
 
   // Hybrid retrieval: embed the query and add a vector query alongside the keyword search,
   // so matching is robust to spelling/spacing/synonyms (important for Arabic). The results
@@ -295,15 +308,15 @@ export async function searchDocuments(
     });
   }
 
-  const documents = [...deduped.values()]
-    .sort((left, right) => right.score - left.score)
-    .slice(0, top);
+  const sorted = [...deduped.values()].sort((left, right) => right.score - left.score);
+  const { documents, notice } = await filterAccessibleDocuments(sorted, top, viewer);
 
   return {
     configured: true,
     query,
     totalMatches: documents.length,
     documents,
+    ...(notice ? { notice } : {}),
   };
 }
 
@@ -451,6 +464,7 @@ export type AdvancedSearchInput = {
   libraries?: string[];
   fileTypes?: FileTypeCategory[];
   top?: number;
+  viewer?: Viewer;
 };
 
 // Escape Lucene query-syntax metacharacters in a user-supplied term.
@@ -568,10 +582,20 @@ export async function searchDocumentsAdvanced(
   }
 
   const typeSet = new Set<FileTypeCategory>(wantTypes);
-  const documents = [...deduped.values()]
+  const sorted = [...deduped.values()]
     .filter((doc) => !filteringTypes || typeSet.has(doc.fileType ?? "other"))
-    .sort((left, right) => right.score - left.score)
-    .slice(0, displayTop);
+    .sort((left, right) => right.score - left.score);
+  const { documents, notice } = await filterAccessibleDocuments(
+    sorted,
+    displayTop,
+    input.viewer,
+  );
 
-  return { configured: true, query, totalMatches: documents.length, documents };
+  return {
+    configured: true,
+    query,
+    totalMatches: documents.length,
+    documents,
+    ...(notice ? { notice } : {}),
+  };
 }

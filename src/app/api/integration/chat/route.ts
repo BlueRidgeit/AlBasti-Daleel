@@ -204,6 +204,7 @@ export async function POST(request: Request) {
             searchDocuments(query, {
               top,
               libraries: selectedLibraries,
+              viewer: { graphAccessToken, userId: authenticatedUser.objectId },
             }),
         }),
         read_document: tool({
@@ -228,6 +229,7 @@ export async function POST(request: Request) {
               question,
               graphAccessToken,
               graphAccessError,
+              authenticatedUser.objectId,
             ),
         }),
         validate_document_access: tool({
