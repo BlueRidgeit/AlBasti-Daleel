@@ -16,8 +16,14 @@ already does) before its title, link or text is returned.
 * `readDocument`: the indexed-text fallback (used when the live read fails) now runs only after
   SharePoint confirms access; otherwise nothing from the index is returned. `validateDocumentAccess`
   does not return the indexed title or link for a denied file.
+* `/api/libraries` (the library picker and its document counts): with the flag on it requires
+  sign-in (no list on the login screen) and lists only libraries whose root folder the user can
+  open (`GET /drives/{drive}/items/root`). A user with access to none sees an empty picker with
+  "No libraries are available to your account." A user with access only to a subfolder inside a
+  library will not see that library in the picker, but search still finds their documents.
 * Callers: `/api/chat`, `/api/integration/chat`, `/api/search`, `/api/search-documents`,
   `/api/read-document`. Any new route that calls `searchDocuments` must pass a viewer.
 
-Not covered: previously saved chat history, library names in the picker, and files reachable only
+Not covered: previously saved chat history, document counts of libraries the user can open (the
+count is the library total), and files reachable only
 through a sharing link (the item endpoint checks the user's direct or group access).

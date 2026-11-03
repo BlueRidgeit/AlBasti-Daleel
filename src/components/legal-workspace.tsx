@@ -168,6 +168,8 @@ export function LegalWorkspace({
   const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [libraries, setLibraries] = useState<LibraryOption[]>([]);
+  // True when the server only listed the libraries this user may open (SharePoint permission trimming).
+  const [librariesLimited, setLibrariesLimited] = useState(false);
   const [selectedLibraries, setSelectedLibraries] = useState<string[]>(
     getInitialSelectedLibraries,
   );
@@ -201,18 +203,27 @@ export function LegalWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/libraries")
-      .then((response) => (response.ok ? response.json() : { libraries: [] }))
-      .then((data: { libraries?: LibraryOption[] }) => {
-        if (!cancelled && Array.isArray(data.libraries)) {
-          setLibraries(
-            data.libraries.filter(
-              (entry) => typeof entry?.label === "string" && entry.label.trim(),
-            ),
-          );
-        }
-      })
-      .catch(() => {});
+    (async () => {
+      // Send the sign-in token when there is one, so the server can list only the libraries
+      // this user may open (when SharePoint permission trimming is on).
+      const accessToken = await getApiAccessToken().catch(() => undefined);
+      const response = await fetch("/api/libraries", {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+      const data: { libraries?: LibraryOption[]; permissionTrimmed?: boolean } = response.ok
+        ? await response.json()
+        : { libraries: [] };
+      if (!cancelled) {
+        setLibrariesLimited(Boolean(data.permissionTrimmed));
+      }
+      if (!cancelled && Array.isArray(data.libraries)) {
+        setLibraries(
+          data.libraries.filter(
+            (entry) => typeof entry?.label === "string" && entry.label.trim(),
+          ),
+        );
+      }
+    })().catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -646,6 +657,7 @@ export function LegalWorkspace({
         locale={locale}
         isArabic={isArabic}
         libraries={libraries}
+        librariesLimited={librariesLimited}
         selectedLibraries={selectedLibraries}
         onToggleLibrary={handleToggleLibrary}
         onClearLibraries={handleClearLibraries}
@@ -1014,6 +1026,7 @@ function SupportPanel({
   locale,
   isArabic,
   libraries,
+  librariesLimited,
   selectedLibraries,
   onToggleLibrary,
   onClearLibraries,
@@ -1023,6 +1036,7 @@ function SupportPanel({
   locale: AppLocale;
   isArabic: boolean;
   libraries: LibraryOption[];
+  librariesLimited: boolean;
   selectedLibraries: string[];
   onToggleLibrary: (label: string) => void;
   onClearLibraries: () => void;
@@ -1054,6 +1068,7 @@ function SupportPanel({
           locale={locale}
           isArabic={isArabic}
           libraries={libraries}
+          limited={librariesLimited}
           selected={selectedLibraries}
           onToggle={onToggleLibrary}
           onClear={onClearLibraries}
@@ -1073,6 +1088,7 @@ function LibraryFilter({
   locale,
   isArabic,
   libraries,
+  limited,
   selected,
   onToggle,
   onClear,
@@ -1080,6 +1096,7 @@ function LibraryFilter({
   locale: AppLocale;
   isArabic: boolean;
   libraries: LibraryOption[];
+  limited: boolean;
   selected: string[];
   onToggle: (label: string) => void;
   onClear: () => void;
@@ -1109,7 +1126,7 @@ function LibraryFilter({
 
       {libraries.length === 0 ? (
         <p className={`mt-3 text-xs text-slate-500 ${isArabic ? "text-right" : "text-left"}`}>
-          {copy.librariesEmpty}
+          {limited ? copy.librariesNoAccess : copy.librariesEmpty}
         </p>
       ) : (
         <div className="mt-3 space-y-1.5">
@@ -1139,7 +1156,11 @@ function LibraryFilter({
       )}
 
       <p className={`mt-2 text-[11px] text-slate-500 ${isArabic ? "text-right" : "text-left"}`}>
-        {selected.length === 0 ? copy.librariesAllHint : copy.librariesScopedHint}
+        {limited && libraries.length === 0
+          ? null
+          : selected.length === 0
+            ? copy.librariesAllHint
+            : copy.librariesScopedHint}
       </p>
     </section>
   );
