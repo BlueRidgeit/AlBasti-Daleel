@@ -26,6 +26,7 @@ import {
   resolveConversationLanguage,
 } from "@/lib/language-preference";
 import { readDocument, validateDocumentAccess } from "@/lib/read-document";
+import { isPermissionTrimmingEnabled } from "@/lib/permission-trim";
 import { searchDocuments } from "@/lib/search-documents";
 import { searchPublicWeb } from "@/lib/web-search";
 import {
@@ -156,7 +157,10 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
-    system: `${getSystemPrompt(env.promptProfile, { canCreate: Object.keys(createTools).length > 0 })}\n\n## Current Conversation Language\n${languageDirective}`,
+    system: `${getSystemPrompt(env.promptProfile, {
+      canCreate: Object.keys(createTools).length > 0,
+      permissionTrimmed: isPermissionTrimmingEnabled(),
+    })}\n\n## Current Conversation Language\n${languageDirective}`,
     messages: await convertToModelMessages(modelMessages),
     tools: {
       ...frontendTools(tools ?? {}),

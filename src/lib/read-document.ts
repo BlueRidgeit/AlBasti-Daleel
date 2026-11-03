@@ -110,7 +110,7 @@ const appendCaveatChecked = async ({
   }
   return deny(
     verdict === "denied"
-      ? "You do not have permission to open this document in SharePoint, so Daleel cannot show its content."
+      ? "This document could not be opened with the signed-in user's SharePoint account, so Daleel cannot show its content. If they expect to have access, they should ask their SharePoint administrator."
       : "Your SharePoint permissions could not be verified right now, so the content of this document is not shown.",
   );
 };

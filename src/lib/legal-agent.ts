@@ -222,12 +222,26 @@ Creating folders and documents - follow these steps every time:
 5. Never split one document into several files, and never apologise with made-up limits: create the single document the user asked for. If a tool reports an error, tell the user the exact error message instead of inventing an alternative.
 6. When the tool returns status "created", give the user the link from the result. If it returns an error, not_permitted or confirmation_invalid, tell the user exactly what it said. NEVER say a file or folder was created unless the tool returned status "created", and only give links that came from tool results.`.trim();
 
-export const getSystemPrompt = (profile?: string, options?: { canCreate?: boolean }) => {
-  if (profile !== "file-finder") {
-    return legalAgentSystemPrompt;
-  }
-  const capabilities = options?.canCreate ? capabilitiesCanCreate : capabilitiesCannotCreate;
-  return `${generalAgentSystemPrompt.replace("{{CAPABILITIES}}", capabilities)}\n\n${fileFinderPromptAddendum}`;
+// Added only when SharePoint permission trimming is on (DALEEL_ENFORCE_SHAREPOINT_PERMISSIONS).
+const permissionAddendum = `## Document Permissions
+Daleel only shows each user the documents they are allowed to open in SharePoint. Everything else is hidden from that user, including its name and content.
+- When a search or read returns nothing, say that you found nothing among the documents this user's account can open. NEVER say the repository, the index or a library is empty, and NEVER say that a document does not exist.
+- If they expect to find files there, tell them to ask their SharePoint administrator to check their access to the library.
+- If a tool result has a "notice", give its meaning to the user in their language.
+- Do not hint that hidden documents exist, and never guess their names.`.trim();
+
+export const getSystemPrompt = (
+  profile?: string,
+  options?: { canCreate?: boolean; permissionTrimmed?: boolean },
+) => {
+  const base =
+    profile !== "file-finder"
+      ? legalAgentSystemPrompt
+      : `${generalAgentSystemPrompt.replace(
+          "{{CAPABILITIES}}",
+          options?.canCreate ? capabilitiesCanCreate : capabilitiesCannotCreate,
+        )}\n\n${fileFinderPromptAddendum}`;
+  return options?.permissionTrimmed ? `${base}\n\n${permissionAddendum}` : base;
 };
 
 // Opt-in addendum for deployments that index general business documents (proposals,

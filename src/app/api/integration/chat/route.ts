@@ -23,6 +23,7 @@ import {
   type ConversationLanguage,
 } from "@/lib/language-preference";
 import { readDocument, validateDocumentAccess } from "@/lib/read-document";
+import { isPermissionTrimmingEnabled } from "@/lib/permission-trim";
 import { searchDocuments } from "@/lib/search-documents";
 import { searchPublicWeb } from "@/lib/web-search";
 
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
   try {
     const result = await generateText({
       model,
-      system: `${getSystemPrompt(env.promptProfile)}\n\n## Current Conversation Language\n${languageDirective}`,
+      system: `${getSystemPrompt(env.promptProfile, { permissionTrimmed: isPermissionTrimmingEnabled() })}\n\n## Current Conversation Language\n${languageDirective}`,
       messages: await convertToModelMessages(messages),
       stopWhen: stepCountIs(12),
       tools: {

@@ -32,6 +32,10 @@ const CACHE_MAX_ENTRIES = 10000;
 
 export const NO_TOKEN_NOTICE =
   "Your SharePoint permissions could not be checked, so no documents are shown. Sign out and sign in again, then retry.";
+// Shown whenever nothing is left to show. It reads the same whether nothing matched or matches were
+// hidden, so it never reveals that a file exists.
+export const NO_ACCESSIBLE_RESULTS_NOTICE =
+  "No documents matching this were found among the documents this user's SharePoint account can open. If they expect to find files here, they should ask their SharePoint administrator to check their access to the library.";
 export const UNVERIFIED_NOTICE =
   "Some results could not be checked against your SharePoint permissions and were left out.";
 
@@ -241,6 +245,11 @@ export async function filterAccessibleDocuments<T extends Candidate>(
   // Say nothing about how many files were hidden; a count would reveal that they exist.
   return {
     documents: accepted,
-    notice: accepted.length === 0 && unverified > 0 ? UNVERIFIED_NOTICE : undefined,
+    notice:
+      accepted.length > 0
+        ? undefined
+        : unverified > 0
+          ? UNVERIFIED_NOTICE
+          : NO_ACCESSIBLE_RESULTS_NOTICE,
   };
 }
