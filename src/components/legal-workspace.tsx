@@ -178,6 +178,7 @@ export function LegalWorkspace({
   const [accessAllowed, setAccessAllowed] = useState(true);
   const [view, setView] = useState<View>("chat");
   const [searchDocs, setSearchDocs] = useState<SearchDoc[]>([]);
+  const [searchPhrase, setSearchPhrase] = useState<string | undefined>(undefined);
   const [searchBusy, setSearchBusy] = useState(false);
   // When a new chat is started from a project, its id rides along on /api/chat so the
   // persisted thread is tagged to that project.
@@ -547,6 +548,7 @@ export function LegalWorkspace({
     setView("search-results");
     setSearchBusy(true);
     setSearchDocs([]);
+    setSearchPhrase(undefined);
     try {
       const accessToken = await getApiAccessToken().catch(() => undefined);
       const response = await fetch("/api/search", {
@@ -558,8 +560,12 @@ export function LegalWorkspace({
         body: JSON.stringify({ ...criteria, libraries: selectedLibraries }),
       });
       if (response.ok) {
-        const data = (await response.json()) as { documents?: SearchDoc[] };
+        const data = (await response.json()) as {
+          documents?: SearchDoc[];
+          matchPhrase?: string;
+        };
         setSearchDocs(Array.isArray(data.documents) ? data.documents : []);
+        setSearchPhrase(typeof data.matchPhrase === "string" ? data.matchPhrase : undefined);
       } else {
         setSearchDocs([]);
       }
@@ -625,6 +631,7 @@ export function LegalWorkspace({
         isArabic={isArabic}
         documents={searchDocs}
         busy={searchBusy}
+        matchPhrase={searchPhrase}
       />
     ) : (
       <Assistant locale={locale} />

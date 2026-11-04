@@ -5,8 +5,10 @@ import { createPortal } from "react-dom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  CheckIcon,
   CheckSquareIcon,
   ChevronDownIcon,
+  CopyIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderIcon,
@@ -55,6 +57,8 @@ export type SearchDoc = {
   folderUrl?: string;
   fileType?: string;
   library?: string;
+  // Passages around the match; matched words are wrapped in ⟦ and ⟧ (only when highlighting is on).
+  highlights?: string[];
 };
 
 export type ChatActions = {
@@ -1012,16 +1016,78 @@ export function ProjectsView({
   );
 }
 
+// Renders text where matched words are wrapped in ⟦ and ⟧ as highlighted words.
+function HighlightedPassage({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\u27e6[^\u27e7]*\u27e7)/g).map((part, index) =>
+        part.startsWith("\u27e6") && part.endsWith("\u27e7") ? (
+          <mark key={index} className="rounded bg-amber-200/80 px-0.5 text-slate-900">
+            {part.slice(1, -1)}
+          </mark>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+// Copies the searched phrase so it can be pasted into the file's Find box (Ctrl+F).
+function CopyPhraseButton({
+  phrase,
+  locale,
+  isArabic,
+}: {
+  phrase: string;
+  locale: AppLocale;
+  isArabic: boolean;
+}) {
+  const copy = getAppCopy(locale);
+  const [done, setDone] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(phrase);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = phrase;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      document.body.removeChild(area);
+    }
+    setDone(true);
+    window.setTimeout(() => setDone(false), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copy.findInFileHint}
+      className={`inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-primary hover:underline ${
+        isArabic ? "flex-row-reverse" : ""
+      }`}
+    >
+      {done ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+      {done ? copy.phraseCopied : copy.copyPhrase}
+    </button>
+  );
+}
+
 export function SearchResultsView({
   locale,
   isArabic,
   documents,
   busy,
+  matchPhrase,
 }: {
   locale: AppLocale;
   isArabic: boolean;
   documents: SearchDoc[];
   busy: boolean;
+  matchPhrase?: string;
 }) {
   const copy = getAppCopy(locale);
 
@@ -1065,9 +1131,19 @@ export function SearchResultsView({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 line-clamp-3 text-sm leading-6 text-slate-600">
-                    {doc.snippet}
-                  </p>
+                  {doc.highlights && doc.highlights.length > 0 ? (
+                    <div className="mt-1 space-y-1 text-sm leading-6 text-slate-600">
+                      {doc.highlights.map((passage, index) => (
+                        <p key={index} className="line-clamp-3">
+                          …<HighlightedPassage text={passage} />…
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 line-clamp-3 text-sm leading-6 text-slate-600">
+                      {doc.snippet}
+                    </p>
+                  )}
                   {doc.url || doc.folderUrl ? (
                     <div
                       className={`mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 ${
@@ -1086,6 +1162,9 @@ export function SearchResultsView({
                           <ExternalLinkIcon className="size-3.5" />
                           {copy.openInSharePoint}
                         </a>
+                      ) : null}
+                      {doc.url && matchPhrase ? (
+                        <CopyPhraseButton phrase={matchPhrase} locale={locale} isArabic={isArabic} />
                       ) : null}
                       {doc.folderUrl ? (
                         <a

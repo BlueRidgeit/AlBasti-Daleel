@@ -12,6 +12,7 @@ type AzureSearchCaption = {
 };
 
 type AzureSearchHit = {
+  "@search.highlights"?: Record<string, string[]>;
   "@search.score"?: number;
   "@search.rerankerScore"?: number;
   "@search.captions"?: AzureSearchCaption[];
@@ -54,6 +55,9 @@ export type SearchDocumentMatch = {
   fileType?: FileTypeCategory;
   lastModified?: string;
   snippet: string;
+  // Passages around the matched words; the words are wrapped in ⟦ and ⟧. Advanced Search only,
+  // and only when DALEEL_HIGHLIGHT_MATCHES is on.
+  highlights?: string[];
   score: number;
 };
 
@@ -64,6 +68,8 @@ export type SearchDocumentsResult = {
   documents: SearchDocumentMatch[];
   // Set only when SharePoint permission trimming could not complete a check (see permission-trim.ts).
   notice?: string;
+  // Advanced Search with highlighting on: the words to look for in the opened file (Ctrl+F).
+  matchPhrase?: string;
 };
 
 type SearchDocumentsOptions = {
@@ -519,6 +525,26 @@ function buildLuceneQuery(input: AdvancedSearchInput): string {
   return clauses.join(" ");
 }
 
+export const HIGHLIGHT_PRE = "\u27e6"; // ⟦
+export const HIGHLIGHT_POST = "\u27e7"; // ⟧
+const MAX_HIGHLIGHTS_PER_DOCUMENT = 3;
+
+// Pull the highlighted passages out of one hit, tidy the whitespace and drop any that carry no match.
+const extractHighlights = (hit: AzureSearchHit): string[] => {
+  const fragments = [
+    ...(hit["@search.highlights"]?.content ?? []),
+    ...(hit["@search.highlights"]?.contentAr ?? []),
+  ];
+  return fragments
+    .map((fragment) => fragment.replace(/\s+/g, " ").trim())
+    .filter((fragment) => fragment.includes(HIGHLIGHT_PRE));
+};
+
+const pickMatchPhrase = (input: AdvancedSearchInput) =>
+  [input.exactPhrase, input.allWords, input.anyWords, input.partWords]
+    .map((value) => stripWrappingPunctuation((value ?? "").trim()))
+    .find(Boolean);
+
 export async function searchDocumentsAdvanced(
   input: AdvancedSearchInput,
 ): Promise<SearchDocumentsResult> {
@@ -543,16 +569,35 @@ export async function searchDocumentsAdvanced(
     search: query,
     queryType: "full",
     searchFields: "content,contentAr,title",
+    ...(env.highlightMatches
+      ? {
+          highlight: `content-${MAX_HIGHLIGHTS_PER_DOCUMENT},contentAr-${MAX_HIGHLIGHTS_PER_DOCUMENT}`,
+          highlightPreTag: HIGHLIGHT_PRE,
+          highlightPostTag: HIGHLIGHT_POST,
+        }
+      : {}),
     top: fetchTop,
     select: "id,title,url,lastModified,content,library,driveId,itemId,fileType,folderUrl",
     ...(libraryFilter ? { filter: libraryFilter } : {}),
   });
 
   const deduped = new Map<string, SearchDocumentMatch>();
+  const passagesByItem = new Map<string, string[]>();
   for (const hit of response.value ?? []) {
     const itemId = resolveCanonicalItemId(hit);
     if (!hit.id || !itemId) {
       continue;
+    }
+
+    // Keep up to a few distinct matching passages per file, from any of its matching chunks.
+    if (env.highlightMatches) {
+      const passages = passagesByItem.get(itemId) ?? [];
+      for (const passage of extractHighlights(hit)) {
+        if (passages.length < MAX_HIGHLIGHTS_PER_DOCUMENT && !passages.includes(passage)) {
+          passages.push(passage);
+        }
+      }
+      passagesByItem.set(itemId, passages);
     }
 
     const score = hit["@search.score"] ?? 0;
@@ -581,6 +626,15 @@ export async function searchDocumentsAdvanced(
     });
   }
 
+  if (env.highlightMatches) {
+    for (const [itemId, passages] of passagesByItem) {
+      const match = deduped.get(itemId);
+      if (match && passages.length > 0) {
+        match.highlights = passages;
+      }
+    }
+  }
+
   const typeSet = new Set<FileTypeCategory>(wantTypes);
   const sorted = [...deduped.values()]
     .filter((doc) => !filteringTypes || typeSet.has(doc.fileType ?? "other"))
@@ -597,5 +651,6 @@ export async function searchDocumentsAdvanced(
     totalMatches: documents.length,
     documents,
     ...(notice ? { notice } : {}),
+    ...(env.highlightMatches ? { matchPhrase: pickMatchPhrase(input) } : {}),
   };
 }

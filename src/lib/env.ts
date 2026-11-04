@@ -122,6 +122,9 @@ export const env = {
   // Opt-in: lets Daleel create folders and Word documents (from a template) in SharePoint, as the
   // signed-in user. Needs the delegated Graph permission Files.ReadWrite.All on the Daleel API app.
   createEnabled: process.env.DALEEL_ENABLE_CREATE?.trim().toLowerCase() === "true",
+  // Opt-in: Advanced Search shows the matching passages with the searched words highlighted, and
+  // a "Copy phrase" button, instead of the first lines of the matching chunk.
+  highlightMatches: process.env.DALEEL_HIGHLIGHT_MATCHES?.trim().toLowerCase() === "true",
   // Optional comma-separated library labels Daleel may write to (default: every indexed library).
   createLibraries:
     trimToUndefined(process.env.DALEEL_CREATE_LIBRARIES)
