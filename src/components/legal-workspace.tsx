@@ -14,14 +14,18 @@ import {
   ChevronRightIcon,
   FilePlus2Icon,
   FolderKanbanIcon,
+  MenuIcon,
   PanelLeftCloseIcon,
   PanelRightCloseIcon,
   SidebarOpenIcon,
+  SlidersHorizontalIcon,
+  XIcon,
 } from "lucide-react";
 import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ComponentType,
   type ReactNode,
 } from "react";
@@ -177,6 +181,10 @@ export function LegalWorkspace({
   // False when access control is on and the signed-in account has not been granted access.
   const [accessAllowed, setAccessAllowed] = useState(true);
   const [view, setView] = useState<View>("chat");
+  // Which drawer is open on phones and tablets (below 1024 px); desktop never uses it.
+  const [drawer, setDrawer] = useState<"nav" | "panel" | null>(null);
+  const isDesktop = useIsDesktop();
+  const closeDrawer = () => setDrawer(null);
   const [searchDocs, setSearchDocs] = useState<SearchDoc[]>([]);
   const [searchPhrase, setSearchPhrase] = useState<string | undefined>(undefined);
   const [searchBusy, setSearchBusy] = useState(false);
@@ -201,6 +209,15 @@ export function LegalWorkspace({
     if (typeof window === "undefined") return;
     window.localStorage.setItem(panelStorageKey, panelOpen ? "1" : "0");
   }, [panelOpen]);
+
+  useEffect(() => {
+    if (!drawer) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDrawer(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawer]);
 
   useEffect(() => {
     let cancelled = false;
@@ -642,9 +659,21 @@ export function LegalWorkspace({
       locale={locale}
       setLocale={setLocale}
       isArabic={isArabic}
-      onNewChat={handleNewChat}
-      onOpenProjects={() => setView("projects")}
-      onViewAll={() => setView("all-chats")}
+      onNewChat={() => {
+        closeDrawer();
+        handleNewChat();
+      }}
+      onOpenProjects={() => {
+        closeDrawer();
+        setView("projects");
+      }}
+      onViewAll={() => {
+        closeDrawer();
+        setView("all-chats");
+      }}
+      mobileOpen={drawer === "nav"}
+      isDesktop={isDesktop}
+      onClose={closeDrawer}
       pinnedChats={pinnedChats}
       recentChats={recentChats.slice(0, 6)}
       totalChats={allChats.length}
@@ -652,15 +681,27 @@ export function LegalWorkspace({
       activeThreadId={activeThread?.id}
       loadingThreadId={loadingThreadId}
       renamingId={renamingId}
-      actions={actions}
+      actions={{
+        ...actions,
+        onOpen: (id: string) => {
+          closeDrawer();
+          actions.onOpen(id);
+        },
+      }}
       onRenameSubmit={handleRenameSubmit}
       isGlobalAdmin={isGlobalAdmin}
     />
   );
 
   const panel = (
-    <PanelSlot open={panelOpen}>
+    <PanelSlot
+      open={panelOpen}
+      drawerOpen={drawer === "panel"}
+      isDesktop={isDesktop}
+      isArabic={isArabic}
+    >
       <SupportPanel
+        onClose={closeDrawer}
         locale={locale}
         isArabic={isArabic}
         libraries={libraries}
@@ -668,7 +709,10 @@ export function LegalWorkspace({
         selectedLibraries={selectedLibraries}
         onToggleLibrary={handleToggleLibrary}
         onClearLibraries={handleClearLibraries}
-        onAdvancedSearch={handleAdvancedSearch}
+        onAdvancedSearch={(criteria) => {
+          closeDrawer();
+          return handleAdvancedSearch(criteria);
+        }}
         searchBusy={searchBusy}
       />
     </PanelSlot>
@@ -681,6 +725,8 @@ export function LegalWorkspace({
       isArabic={isArabic}
       panelOpen={panelOpen}
       setPanelOpen={setPanelOpen}
+      onOpenNav={() => setDrawer("nav")}
+      onOpenPanel={() => setDrawer("panel")}
       title={view === "chat" ? workspaceTitle : ""}
     >
       {mainContent}
@@ -716,11 +762,19 @@ export function LegalWorkspace({
       selectedLibraries={selectedLibraries}
       pendingProjectId={pendingProjectId}
     >
-      <main className="min-h-screen bg-app px-3 py-3 text-slate-900 md:px-4 md:py-4">
+      <main className="min-h-screen bg-app p-0 text-slate-900 lg:p-4">
         <div
           dir="ltr"
-          className="mx-auto flex h-[calc(100vh-1.5rem)] min-h-[calc(100vh-1.5rem)] w-full max-w-[1800px] overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/50 shadow-[0_30px_90px_-45px_rgba(23,35,52,0.45)] backdrop-blur"
+          className="relative mx-auto flex h-dvh min-h-dvh w-full max-w-[1800px] overflow-hidden bg-white/50 backdrop-blur lg:h-[calc(100vh-1.5rem)] lg:min-h-[calc(100vh-1.5rem)] lg:rounded-[1.5rem] lg:border lg:border-white/70 lg:shadow-[0_30px_90px_-45px_rgba(23,35,52,0.45)]"
         >
+          {drawer ? (
+            <button
+              type="button"
+              aria-label={isArabic ? "إغلاق" : "Close"}
+              onClick={closeDrawer}
+              className="absolute inset-0 z-30 bg-slate-950/40 lg:hidden"
+            />
+          ) : null}
           {!isArabic ? (
             <>
               {nav}
@@ -737,6 +791,21 @@ export function LegalWorkspace({
         </div>
       </main>
     </ChatRuntimeShell>
+  );
+}
+
+// Below this width (phones and tablets in portrait) the menu and the assistant panel are drawers.
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
+function useIsDesktop() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(DESKTOP_QUERY);
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => true,
   );
 }
 
@@ -790,12 +859,30 @@ function ChatRuntimeShell({
   return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
 
-function PanelSlot({ open, children }: { open: boolean; children: ReactNode }) {
+// Desktop: a column that opens and closes. Phones and tablets: a drawer over the page.
+function PanelSlot({
+  open,
+  drawerOpen,
+  isDesktop,
+  isArabic,
+  children,
+}: {
+  open: boolean;
+  drawerOpen: boolean;
+  isDesktop: boolean;
+  isArabic: boolean;
+  children: ReactNode;
+}) {
   return (
     <div
       aria-hidden={!open}
-      className={`hidden overflow-hidden transition-[width,opacity] duration-300 ease-out lg:flex ${
-        open ? "w-[330px] opacity-100" : "w-0 opacity-0"
+      inert={!isDesktop && !drawerOpen}
+      className={`absolute inset-y-0 z-40 flex w-[min(330px,90vw)] overflow-hidden bg-white shadow-2xl transition-[transform,width,opacity] duration-300 ease-out ${
+        isArabic ? "right-0" : "left-0"
+      } ${
+        drawerOpen ? "translate-x-0" : isArabic ? "translate-x-full" : "-translate-x-full"
+      } lg:static lg:z-auto lg:translate-x-0 lg:bg-transparent lg:shadow-none ${
+        open ? "lg:w-[330px] lg:opacity-100" : "lg:w-0 lg:opacity-0"
       }`}
     >
       {children}
@@ -809,6 +896,8 @@ function Workspace({
   isArabic,
   panelOpen,
   setPanelOpen,
+  onOpenNav,
+  onOpenPanel,
   title,
   children,
 }: {
@@ -817,6 +906,8 @@ function Workspace({
   isArabic: boolean;
   panelOpen: boolean;
   setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  onOpenNav: () => void;
+  onOpenPanel: () => void;
   title: string;
   children: ReactNode;
 }) {
@@ -829,12 +920,20 @@ function Workspace({
       dir={isArabic ? "rtl" : "ltr"}
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,_rgba(255,255,255,0.84),_rgba(244,241,235,0.96))]"
     >
-      <div className="border-b border-slate-200/80 bg-header-tint px-6 py-5">
-        <div className="flex items-start gap-3">
+      <div className="border-b border-slate-200/80 bg-header-tint px-3 py-3 lg:px-6 lg:py-5">
+        <div className="flex items-center gap-2 lg:items-start lg:gap-3">
+          <button
+            type="button"
+            onClick={onOpenNav}
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/90 text-slate-700 shadow-sm lg:hidden"
+            aria-label={isArabic ? "القائمة" : "Menu"}
+          >
+            <MenuIcon className="size-5" />
+          </button>
           <button
             type="button"
             onClick={() => setPanelOpen((current) => !current)}
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/90 text-slate-700 shadow-sm transition hover:border-[rgba(38,53,139,0.18)] hover:bg-white"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/90 text-slate-700 shadow-sm transition hover:border-[rgba(38,53,139,0.18)] hover:bg-white max-lg:hidden"
             aria-label={panelOpen ? copy.navCollapsePanel : copy.navExpandPanel}
             title={panelOpen ? copy.navCollapsePanel : copy.navExpandPanel}
           >
@@ -845,10 +944,18 @@ function Workspace({
             )}
           </button>
           {title ? (
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+            <h2 className="min-w-0 text-lg font-semibold tracking-tight text-slate-950 max-lg:truncate lg:text-2xl">
               {title}
             </h2>
           ) : null}
+          <button
+            type="button"
+            onClick={onOpenPanel}
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/90 text-slate-700 shadow-sm max-lg:ms-auto lg:hidden"
+            aria-label={copy.navExpandPanel}
+          >
+            <SlidersHorizontalIcon className="size-5" />
+          </button>
         </div>
       </div>
 
@@ -896,10 +1003,16 @@ function PrimaryNav({
   actions,
   onRenameSubmit,
   isGlobalAdmin,
+  mobileOpen,
+  isDesktop,
+  onClose,
 }: {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
   isArabic: boolean;
+  mobileOpen: boolean;
+  isDesktop: boolean;
+  onClose: () => void;
   onNewChat: () => void;
   onOpenProjects: () => void;
   onViewAll: () => void;
@@ -921,10 +1034,23 @@ function PrimaryNav({
   return (
     <aside
       dir={isArabic ? "rtl" : "ltr"}
-      className={`flex min-h-0 w-[290px] shrink-0 flex-col bg-sidebar text-sidebar-foreground ${
-        isArabic ? "border-l border-sidebar-border" : "border-r border-sidebar-border"
+      inert={!isDesktop && !mobileOpen}
+      className={`absolute inset-y-0 z-40 flex min-h-0 w-[min(290px,86vw)] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-out lg:static lg:z-auto lg:w-[290px] lg:shrink-0 lg:translate-x-0 ${
+        isArabic ? "right-0 border-l border-sidebar-border" : "left-0 border-r border-sidebar-border"
+      } ${
+        mobileOpen ? "translate-x-0 shadow-2xl" : isArabic ? "translate-x-full" : "-translate-x-full"
       }`}
     >
+      <div className="flex justify-end px-2 pt-2 lg:hidden">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={isArabic ? "إغلاق" : "Close"}
+          className="inline-flex size-10 items-center justify-center rounded-full bg-black/25 text-white"
+        >
+          <XIcon className="size-5" />
+        </button>
+      </div>
       <div className="border-b border-sidebar-border px-5 py-4">
         <Image
           src={brand.logos.nav ?? (isArabic ? "/daleel-logo-ar.png" : "/daleel-logo-en.png")}
@@ -1039,7 +1165,9 @@ function SupportPanel({
   onClearLibraries,
   onAdvancedSearch,
   searchBusy,
+  onClose,
 }: {
+  onClose: () => void;
   locale: AppLocale;
   isArabic: boolean;
   libraries: LibraryOption[];
@@ -1055,11 +1183,19 @@ function SupportPanel({
   return (
     <aside
       dir={isArabic ? "rtl" : "ltr"}
-      className={`flex min-h-0 w-[330px] shrink-0 flex-col bg-white/72 ${
+      className={`relative flex min-h-0 w-full shrink-0 flex-col bg-white lg:w-[330px] lg:bg-white/72 ${
         isArabic ? "border-l border-slate-200/80" : "border-r border-slate-200/80"
       }`}
     >
       <div className="border-b border-slate-200/80 px-5 py-5">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={isArabic ? "إغلاق" : "Close"}
+          className="absolute end-2 top-2 inline-flex size-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 lg:hidden"
+        >
+          <XIcon className="size-5" />
+        </button>
         <div className={isArabic ? "text-right" : "text-left"}>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">
             {copy.supportPanelTitle}

@@ -315,7 +315,7 @@ export function AllChatsView({
   return (
     <div
       dir={isArabic ? "rtl" : "ltr"}
-      className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-8"
+      className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-3 py-4 sm:px-6 sm:py-8"
     >
       {selectionMode ? (
         <div className={viewHeaderCls}>
@@ -682,7 +682,7 @@ export function ProjectsView({
     return (
       <div
         dir={isArabic ? "rtl" : "ltr"}
-        className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-8"
+        className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-3 py-4 sm:px-6 sm:py-8"
       >
         <button
           type="button"
@@ -897,7 +897,7 @@ export function ProjectsView({
   return (
     <div
       dir={isArabic ? "rtl" : "ltr"}
-      className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-8"
+      className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-3 py-4 sm:px-6 sm:py-8"
     >
       <div className={viewHeaderCls}>
         <h2 className="min-w-0 flex-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
@@ -1094,7 +1094,7 @@ export function SearchResultsView({
   return (
     <div
       dir={isArabic ? "rtl" : "ltr"}
-      className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-8"
+      className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-3 py-4 sm:px-6 sm:py-8"
     >
       <div className={`${viewHeaderCls} ${isArabic ? "flex-row-reverse" : ""}`}>
         <h2 className="flex-1 text-2xl font-semibold tracking-tight text-slate-950">
